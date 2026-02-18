@@ -76,8 +76,9 @@ const api = {
   },
 
   // Orders (backend: /api/orders/)
-  getOrders() {
-    return this.get('api/orders/');
+  getOrders(includeHidden = false) {
+    const qs = includeHidden ? '?include_hidden=1' : '';
+    return this.get(`api/orders/${qs}`);
   },
 
   getOrder(id) {
@@ -90,6 +91,10 @@ const api = {
 
   updateOrder(id, data) {
     return this.put(`api/orders/${id}/`, data, false);
+  },
+
+  patchOrder(id, data) {
+    return this.patch(`api/orders/${id}/`, data);
   },
 
   sendOrder(id) {

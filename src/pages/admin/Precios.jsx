@@ -6,7 +6,6 @@ const DEFAULT_PRICES = {
   price_sin_luz: 24000,
   price_con_luz: 42000,
   price_pilas: 2500,
-  deposit_amount: 12000,
   transfer_alias: 'manu.perea13',
   transfer_bank: 'Mercado Pago',
   transfer_holder: 'Manuel Perea',
@@ -40,7 +39,6 @@ const AdminPrecios = () => {
       'price_sin_luz',
       'price_con_luz',
       'price_pilas',
-      'deposit_amount',
     ];
     const v = numFields.includes(field) ? (value === '' ? '' : parseInt(value, 10)) : value;
     setForm((f) => ({ ...f, [field]: v }));
@@ -57,7 +55,6 @@ const AdminPrecios = () => {
       price_sin_luz: form.price_sin_luz,
       price_con_luz: form.price_con_luz,
       price_pilas: form.price_pilas,
-      deposit_amount: form.deposit_amount,
       transfer_alias: form.transfer_alias,
       transfer_bank: form.transfer_bank,
       transfer_holder: form.transfer_holder,
@@ -91,7 +88,7 @@ const AdminPrecios = () => {
     <div className="admin-stock-page">
       <header className="admin-page-header">
         <h1>Precios y datos de pago</h1>
-        <p>Precios de productos, monto de la seña, datos para transferencia y contacto. Se muestran en la home y en el modal de pedido confirmado.</p>
+        <p>Precios de productos, datos para transferencia y contacto. La seña se calcula: con luz (Cajita Con Luz + Pilas) / 2, sin luz la mitad del precio Sin Luz.</p>
       </header>
 
       <form onSubmit={handleSubmit} className="client-data-card admin-precios-card">
@@ -138,21 +135,6 @@ const AdminPrecios = () => {
               min="0"
               value={form.price_pilas === '' ? '' : form.price_pilas}
               onChange={(e) => handleChange('price_pilas', e.target.value)}
-              className="admin-precios-input"
-            />
-          </div>
-        </div>
-
-        <h2 className="admin-precios-section-title">Seña (depósito)</h2>
-        <div className="admin-precios-grid admin-precios-grid--short">
-          <div className="client-data-form-group">
-            <label htmlFor="deposit_amount">Monto de la seña ($)</label>
-            <input
-              id="deposit_amount"
-              type="number"
-              min="0"
-              value={form.deposit_amount === '' ? '' : form.deposit_amount}
-              onChange={(e) => handleChange('deposit_amount', e.target.value)}
               className="admin-precios-input"
             />
           </div>

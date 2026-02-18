@@ -23,6 +23,14 @@ const SHIPPING_LABELS = {
   shipping_province: 'Envío a otra provincia',
 };
 
+const STATUS_LABELS = {
+  draft: 'Borrador',
+  sent: 'En Proceso',
+  in_progress: 'En Proceso',
+  processing: 'Finalizada',
+  delivered: 'Entregada',
+};
+
 const PedidoView = () => {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
@@ -106,7 +114,7 @@ const PedidoView = () => {
 
         {order.status && (
           <div className="pedido-view-section">
-            <p><strong>Estado:</strong> {(order.status === 'sent' || order.status === 'in_progress') ? 'En Curso' : order.status}</p>
+            <p><strong>Estado:</strong> {STATUS_LABELS[order.status] ?? order.status}</p>
           </div>
         )}
       </div>

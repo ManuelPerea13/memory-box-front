@@ -47,18 +47,22 @@ const AdminLayout = () => {
   const dropdownRef = useRef(null);
 
   const addNotification = useCallback((payload) => {
-    if (payload.order_id == null) return;
-    setNotifications((prev) => [
-      {
-        id: `${payload.order_id}-${Date.now()}`,
-        orderId: payload.order_id,
-        clientName: payload.client_name || 'Cliente',
-        variant: payload.variant || '',
-        withLight: payload.with_light === true,
-        createdAt: new Date(),
-      },
-      ...prev.slice(0, 49),
-    ]);
+    if (payload.order_id == null || payload.status !== 'in_progress') return;
+    const newNotif = {
+      id: `${payload.order_id}-${Date.now()}`,
+      orderId: payload.order_id,
+      clientName: payload.client_name || 'Cliente',
+      variant: payload.variant || '',
+      withLight: payload.with_light === true,
+      createdAt: new Date(),
+    };
+    setNotifications((prev) => {
+      const recentSame = prev.some(
+        (n) => n.orderId === payload.order_id && Date.now() - n.createdAt.getTime() < 3000
+      );
+      if (recentSame) return prev;
+      return [newNotif, ...prev.slice(0, 49)];
+    });
   }, []);
 
   const handleOrdersUpdate = useCallback((data) => {

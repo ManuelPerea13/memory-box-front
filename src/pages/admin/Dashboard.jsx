@@ -3,16 +3,17 @@ import api from '../../restclient/api';
 
 const STATUS_LABELS = {
   draft: 'Borrador',
-  sent: 'En Curso',
-  in_progress: 'En Curso',
-  processing: 'En proceso',
-  delivered: 'Entregado',
+  sent: 'En Proceso',
+  in_progress: 'En Proceso',
+  processing: 'Finalizada',
+  delivered: 'Entregada',
 };
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'draft', label: 'Borrador' },
-  { value: 'in_progress', label: 'En Curso' },
-  { value: 'delivered', label: 'Entregado' },
+  { value: 'in_progress', label: 'En Proceso' },
+  { value: 'processing', label: 'Finalizada' },
+  { value: 'delivered', label: 'Entregada' },
 ];
 
 const BOX_TYPE_LABELS = {
@@ -62,28 +63,51 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [showHiddenOrders, setShowHiddenOrders] = useState(false);
   const [detailOrder, setDetailOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
+  const [updatingSenaId, setUpdatingSenaId] = useState(null);
+  const [hidingOrderId, setHidingOrderId] = useState(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState(null);
+  const [openMenuId, setOpenMenuId] = useState(null);
 
-  const loadOrders = useCallback((silent = false) => {
+  const loadOrders = useCallback((silent = false, includeHidden = false) => {
     if (!silent) setLoading(true);
     api
-      .getOrders()
+      .getOrders(includeHidden)
       .then(setPedidos)
       .catch(() => setPedidos([]))
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+  const loadOrdersWithCurrentFilter = useCallback(
+    (silent = false) => loadOrders(silent, showHiddenOrders),
+    [loadOrders, showHiddenOrders]
+  );
 
   useEffect(() => {
-    const handler = () => loadOrders(true);
+    loadOrdersWithCurrentFilter();
+  }, [loadOrdersWithCurrentFilter]);
+
+  useEffect(() => {
+    const handler = () => loadOrdersWithCurrentFilter(true);
     window.addEventListener('orders-update', handler);
     return () => window.removeEventListener('orders-update', handler);
-  }, [loadOrders]);
+  }, [loadOrdersWithCurrentFilter]);
+
+  useEffect(() => {
+    if (openMenuId == null) return;
+    const close = () => setOpenMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openMenuId]);
+
+  const onToggleShowHidden = () => {
+    const next = !showHiddenOrders;
+    setShowHiddenOrders(next);
+    loadOrders(true, next);
+  };
 
   const filtered = pedidos.filter((p) => {
     const matchSearch =
@@ -103,6 +127,7 @@ const AdminDashboard = () => {
     total: pedidos.length,
     draft: pedidos.filter((p) => p.status === 'draft').length,
     enCurso: enCursoCount,
+    processing: pedidos.filter((p) => p.status === 'processing').length,
     delivered: pedidos.filter((p) => p.status === 'delivered').length,
   };
 
@@ -114,6 +139,76 @@ const AdminDashboard = () => {
       .then(setDetailOrder)
       .catch(() => setDetailOrder(null))
       .finally(() => setDetailLoading(false));
+  };
+
+  const hideDraft = (e, orderId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hidingOrderId != null) return;
+    setHidingOrderId(orderId);
+    api
+      .patchOrder(orderId, { active: false })
+      .then(() => {
+        setPedidos((prev) => prev.filter((p) => p.id !== orderId));
+        if (detailOrder?.id === orderId) setDetailOrder(null);
+      })
+      .catch(() => {})
+      .finally(() => setHidingOrderId(null));
+  };
+
+  const showOrder = (e, orderId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hidingOrderId != null) return;
+    setHidingOrderId(orderId);
+    api
+      .patchOrder(orderId, { active: true })
+      .then(() => loadOrdersWithCurrentFilter(true))
+      .catch(() => {})
+      .finally(() => setHidingOrderId(null));
+  };
+
+  const changeOrderStatus = (orderId, newStatus) => {
+    if (updatingStatusId != null) return;
+    setOpenMenuId(null);
+    setUpdatingStatusId(orderId);
+    api
+      .patchOrder(orderId, { status: newStatus })
+      .then(() => {
+        setPedidos((prev) =>
+          prev.map((p) => (p.id === orderId ? { ...p, status: newStatus } : p))
+        );
+        if (detailOrder?.id === orderId) {
+          setDetailOrder((d) => (d ? { ...d, status: newStatus } : d));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setUpdatingStatusId(null));
+  };
+
+  const toggleSena = (e, orderId, currentDeposit) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (updatingSenaId != null) return;
+    setUpdatingSenaId(orderId);
+    const clearUpdating = () => setUpdatingSenaId(null);
+    const fallback = setTimeout(clearUpdating, 8000);
+    const newValue = !currentDeposit;
+    api
+      .patchOrder(orderId, { deposit: newValue })
+      .then(() => {
+        setPedidos((prev) =>
+          prev.map((p) => (p.id === orderId ? { ...p, deposit: newValue } : p))
+        );
+        if (detailOrder?.id === orderId) {
+          setDetailOrder((d) => (d ? { ...d, deposit: newValue } : d));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        clearTimeout(fallback);
+        clearUpdating();
+      });
   };
 
   const boxTypeLabel = (v) => (v ? BOX_TYPE_LABELS[v] ?? v : '');
@@ -141,11 +236,15 @@ const AdminDashboard = () => {
           </div>
           <div className="admin-stat">
             <span className="admin-stat-value">{stats.enCurso}</span>
-            <span className="admin-stat-label">En Curso</span>
+            <span className="admin-stat-label">En Proceso</span>
+          </div>
+          <div className="admin-stat">
+            <span className="admin-stat-value">{stats.processing}</span>
+            <span className="admin-stat-label">Finalizada</span>
           </div>
           <div className="admin-stat">
             <span className="admin-stat-value">{stats.delivered}</span>
-            <span className="admin-stat-label">Entregado</span>
+            <span className="admin-stat-label">Entregada</span>
           </div>
         </section>
 
@@ -169,6 +268,14 @@ const AdminDashboard = () => {
               </option>
             ))}
           </select>
+          <label className="admin-filter-checkbox">
+            <input
+              type="checkbox"
+              checked={showHiddenOrders}
+              onChange={onToggleShowHidden}
+            />
+            <span>Ver pedidos ocultos</span>
+          </label>
         </div>
 
         <section className="admin-dashboard-orders">
@@ -185,11 +292,12 @@ const AdminDashboard = () => {
                     <th>#</th>
                     <th>Cliente</th>
                     <th>Teléfono</th>
+                    <th>Variante</th>
                     <th>Tipo</th>
                     <th>LED</th>
-                    <th>Variante</th>
                     <th>Envío</th>
                     <th>Estado</th>
+                    <th>Seña</th>
                     <th>Fecha</th>
                     <th></th>
                   </tr>
@@ -200,24 +308,110 @@ const AdminDashboard = () => {
                       <td>{p.id}</td>
                       <td>{p.client_name || '—'}</td>
                       <td>{p.phone || '—'}</td>
+                      <td>{variantLabel(p.variant)}</td>
                       <td>{boxTypeLabel(p.box_type)}</td>
                       <td>{p.led_type ? ledTypeLabel(p.led_type) : '—'}</td>
-                      <td>{variantLabel(p.variant)}</td>
                       <td>{p.shipping_option ? shippingLabel(p.shipping_option) : '—'}</td>
                       <td>
                         <span className={`admin-status admin-status-${p.status === 'sent' ? 'in_progress' : (p.status || 'draft')}`}>
                           {statusLabel(p.status)}
                         </span>
                       </td>
-                      <td>{p.created_at ? new Date(p.created_at).toLocaleDateString('es-AR') : '—'}</td>
                       <td>
                         <button
                           type="button"
-                          className="btn btn-secondary admin-btn-ver"
-                          onClick={() => openDetail(p.id)}
+                          role="switch"
+                          aria-checked={p.deposit === true}
+                          aria-label={p.deposit ? 'Seña recibida' : 'Seña pendiente'}
+                          className={`admin-toggle ${p.deposit ? 'admin-toggle-on' : ''}`}
+                          disabled={updatingSenaId === p.id}
+                          onClick={(ev) => toggleSena(ev, p.id, !!p.deposit)}
                         >
-                          Ver
+                          <span className="admin-toggle-thumb" />
                         </button>
+                      </td>
+                      <td>{p.created_at ? new Date(p.created_at).toLocaleDateString('es-AR') : '—'}</td>
+                      <td className="admin-orders-actions">
+                        <div
+                          className="admin-orders-menu-wrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            className="admin-btn-menu-trigger"
+                            onClick={() => setOpenMenuId((id) => (id === p.id ? null : p.id))}
+                            aria-expanded={openMenuId === p.id}
+                            aria-haspopup="true"
+                            aria-label="Abrir menú de acciones"
+                          >
+                            <span className="admin-btn-menu-dots" aria-hidden>⋯</span>
+                          </button>
+                          {openMenuId === p.id && (
+                            <div className="admin-orders-dropdown" role="menu">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="admin-orders-dropdown-item admin-orders-dropdown-ver"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  openDetail(p.id);
+                                }}
+                              >
+                                Ver
+                              </button>
+                              {p.status === 'draft' && p.active !== false && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="admin-orders-dropdown-item admin-orders-dropdown-ocultar"
+                                  disabled={hidingOrderId === p.id}
+                                  onClick={(ev) => {
+                                    setOpenMenuId(null);
+                                    hideDraft(ev, p.id);
+                                  }}
+                                >
+                                  {hidingOrderId === p.id ? '...' : 'Ocultar'}
+                                </button>
+                              )}
+                              {showHiddenOrders && p.active === false && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="admin-orders-dropdown-item admin-orders-dropdown-mostrar"
+                                  disabled={hidingOrderId === p.id}
+                                  onClick={(ev) => {
+                                    setOpenMenuId(null);
+                                    showOrder(ev, p.id);
+                                  }}
+                                >
+                                  {hidingOrderId === p.id ? '...' : 'Mostrar'}
+                                </button>
+                              )}
+                              {(p.status === 'in_progress' || p.status === 'sent') && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="admin-orders-dropdown-item admin-orders-dropdown-status"
+                                  disabled={updatingStatusId === p.id}
+                                  onClick={() => changeOrderStatus(p.id, 'processing')}
+                                >
+                                  {updatingStatusId === p.id ? '...' : 'Pasar a Finalizado'}
+                                </button>
+                              )}
+                              {p.status === 'processing' && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="admin-orders-dropdown-item admin-orders-dropdown-status"
+                                  disabled={updatingStatusId === p.id}
+                                  onClick={() => changeOrderStatus(p.id, 'delivered')}
+                                >
+                                  {updatingStatusId === p.id ? '...' : 'Pasar a Entregado'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -289,6 +483,20 @@ const AdminDashboard = () => {
                 <p><strong>Variante:</strong> {variantLabel(detailOrder.variant)}</p>
                 {detailOrder.shipping_option && <p><strong>Envío:</strong> {shippingLabel(detailOrder.shipping_option)}</p>}
                 <p><strong>Estado:</strong> {statusLabel(detailOrder.status)}</p>
+                <p className="admin-detail-row-with-toggle">
+                  <strong>Seña:</strong>{' '}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={detailOrder.deposit === true}
+                    aria-label={detailOrder.deposit ? 'Seña recibida' : 'Seña pendiente'}
+                    className={`admin-toggle ${detailOrder.deposit ? 'admin-toggle-on' : ''}`}
+                    disabled={updatingSenaId === detailOrder.id}
+                    onClick={(ev) => toggleSena(ev, detailOrder.id, !!detailOrder.deposit)}
+                  >
+                    <span className="admin-toggle-thumb" />
+                  </button>
+                </p>
               </div>
               {detailOrder.created_at && (
                 <p className="admin-detail-date">

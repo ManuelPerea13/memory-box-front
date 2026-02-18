@@ -486,8 +486,16 @@ const ImageEditor = () => {
             <div className="order-confirmed-deposit">
               <span>Monto de la Seña:</span>
               <span className="order-confirmed-amount">
-                {confirmedData?.deposit_amount
-                  ?? (pricesSettings?.deposit_amount != null ? `$ ${Number(pricesSettings.deposit_amount).toLocaleString('es-AR')}` : DEFAULT_DEPOSIT)}
+                {(() => {
+                  const withLight = order?.box_type === 'with_light';
+                  const conLuz = Number(pricesSettings?.price_con_luz) || 42000;
+                  const pilas = Number(pricesSettings?.price_pilas) || 2500;
+                  const sinLuz = Number(pricesSettings?.price_sin_luz) || 24000;
+                  const amount = withLight
+                    ? Math.round((conLuz + pilas) / 2)
+                    : Math.round(sinLuz / 2);
+                  return `$ ${amount.toLocaleString('es-AR')}`;
+                })()}
               </span>
             </div>
             <div className="client-data-form-group">

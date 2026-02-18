@@ -14,12 +14,14 @@ const useOrdersWebSocket = (onOrdersUpdate) => {
   const onOrdersUpdateRef = useRef(onOrdersUpdate);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     onOrdersUpdateRef.current = onOrdersUpdate;
   }, [onOrdersUpdate]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     const baseUrl = api.baseUrl || 'http://localhost:8000/';
     const wsBase = baseUrl.replace(/^http/, 'ws');
     const wsUrl = `${wsBase}ws/orders/`;
@@ -29,13 +31,17 @@ const useOrdersWebSocket = (onOrdersUpdate) => {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      if (wsRef.current) {
-        wsRef.current.close(1000, 'Unmount');
+      const ws = wsRef.current;
+      if (ws) {
         wsRef.current = null;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1000, 'Unmount');
+        }
       }
     };
 
     const connect = () => {
+      if (cancelledRef.current) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
       if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) return;
 
@@ -44,6 +50,11 @@ const useOrdersWebSocket = (onOrdersUpdate) => {
         wsRef.current = ws;
 
         ws.onopen = () => {
+          if (cancelledRef.current) {
+            ws.close(1000, 'Unmount');
+            wsRef.current = null;
+            return;
+          }
           reconnectAttemptsRef.current = 0;
         };
 
@@ -60,6 +71,7 @@ const useOrdersWebSocket = (onOrdersUpdate) => {
 
         ws.onclose = (event) => {
           wsRef.current = null;
+          if (cancelledRef.current) return;
           if (event.code === 1000 || event.code === 1001) return;
           reconnectAttemptsRef.current += 1;
           const delay = Math.min(
@@ -69,6 +81,7 @@ const useOrdersWebSocket = (onOrdersUpdate) => {
           reconnectTimeoutRef.current = setTimeout(connect, delay);
         };
       } catch (_) {
+        if (cancelledRef.current) return;
         reconnectAttemptsRef.current += 1;
         const delay = Math.min(
           INITIAL_RECONNECT_MS * 2 ** (reconnectAttemptsRef.current - 1),
@@ -80,7 +93,10 @@ const useOrdersWebSocket = (onOrdersUpdate) => {
 
     connect();
 
-    return () => close();
+    return () => {
+      cancelledRef.current = true;
+      close();
+    };
   }, []);
 
   return {
