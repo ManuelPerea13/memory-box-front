@@ -3,13 +3,12 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../restclient/api';
 
 // Formatea nombre: primera letra de cada palabra en mayúscula, resto en minúscula.
-// Sin .trim() para no borrar espacios al escribir (igual que catriel-front formatName).
+// Solo se formatean bloques de no-espacios (\S+); los espacios no se tocan (p. ej. para apellido).
 const formatNombreCompleto = (str) => {
   if (!str || typeof str !== 'string') return '';
-  return str
-    .split(' ')
-    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : ''))
-    .join(' ');
+  return str.replace(/(\S+)/g, (word) =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  );
 };
 
 // Solo lo que ingresa el usuario: código de área + número (10 dígitos). El back agrega +54 9.
@@ -88,7 +87,8 @@ const ClientData = () => {
     setForm((prev) => {
       const next = { ...prev };
       if (name === 'nombre_cliente') {
-        next.nombre_cliente = formatNombreCompleto(value);
+        // Guardar tal cual al escribir; el formato se aplica en onBlur para no bloquear espacios.
+        next.nombre_cliente = value;
       } else if (name === 'telefono') {
         next.telefono = sanitizePhoneInput(value);
       } else {
@@ -159,11 +159,13 @@ const ClientData = () => {
               Nombre Completo *
             </label>
             <input
+
               id="nombre_cliente"
               type="text"
               name="nombre_cliente"
               value={form.nombre_cliente}
               onChange={handleChange}
+              onBlur={() => setForm((prev) => ({ ...prev, nombre_cliente: formatNombreCompleto((prev.nombre_cliente || '').trim()) }))}
               placeholder="Ej: Juan Pérez"
               required
             />

@@ -22,6 +22,12 @@ const VARIANT_LABELS = {
 
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
+// Imágenes por defecto con frases (estáticas en public/default-phrases/)
+const DEFAULT_PHRASE_IMAGES = [
+  { path: 'default-phrases/frase-contigo.png', name: 'Querés ser mi novia?' },
+  { path: 'default-phrases/frase-felicidad.png', name: 'Llenas de felicidad mi corazón' },
+];
+
 const EDITOR_ORDER_KEY = 'editorOrderId';
 const getEditorStateKey = (id) => `editorState_${id}`;
 
@@ -37,6 +43,26 @@ const dataUrlToFile = (dataUrl, name) =>
   fetch(dataUrl)
     .then((r) => r.blob())
     .then((blob) => new File([blob], name, { type: blob.type }));
+
+const getDefaultPhraseImageUrl = (path) => {
+  const base = process.env.PUBLIC_URL || '';
+  return `${base}/${path}`;
+};
+
+const getImageDimensions = (url) =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = reject;
+    img.src = url;
+  });
+
+const getCenteredSquareCrop = (width, height) => {
+  const size = Math.min(width, height);
+  const x = (width - size) / 2;
+  const y = (height - size) / 2;
+  return { x, y, w: size, h: size };
+};
 
 const ImageEditor = () => {
   const location = useLocation();
@@ -55,6 +81,9 @@ const ImageEditor = () => {
   const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [confirmedData, setConfirmedData] = useState(null);
   const [pricesSettings, setPricesSettings] = useState(null);
+  const [addingDefaultPhrases, setAddingDefaultPhrases] = useState(false);
+  const [showPhraseModal, setShowPhraseModal] = useState(false);
+  const [selectedPhraseIndexes, setSelectedPhraseIndexes] = useState([]);
   const cropPixelsRef = useRef(null);
 
   useEffect(() => {
@@ -199,6 +228,73 @@ const ImageEditor = () => {
     cropPixelsRef.current = null;
   };
 
+  const openPhraseModal = () => {
+    setSelectedPhraseIndexes([]);
+    setShowPhraseModal(true);
+  };
+
+  const togglePhraseSelection = (idx) => {
+    const remaining = REQUIRED_COUNT - images.length;
+    setSelectedPhraseIndexes((prev) => {
+      if (prev.includes(idx)) return prev.filter((i) => i !== idx);
+      if (prev.length >= remaining) return prev;
+      return [...prev, idx];
+    });
+  };
+
+  const addSelectedPhraseImages = async () => {
+    const remaining = REQUIRED_COUNT - images.length;
+    if (remaining <= 0 || selectedPhraseIndexes.length === 0) {
+      setShowPhraseModal(false);
+      return;
+    }
+    const toLoad = selectedPhraseIndexes
+      .slice(0, remaining)
+      .map((i) => DEFAULT_PHRASE_IMAGES[i])
+      .filter(Boolean);
+    setAddingDefaultPhrases(true);
+    setShowPhraseModal(false);
+    setSelectedPhraseIndexes([]);
+    try {
+      const loaded = [];
+      for (const item of toLoad) {
+        try {
+          const url = getDefaultPhraseImageUrl(item.path);
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const blob = await res.blob();
+          const ext = blob.type === 'image/png' ? '.png' : '.jpg';
+          const fileName = `${item.name.replace(/\s+/g, '-').toLowerCase()}${ext}`;
+          const file = new File([blob], fileName, { type: blob.type });
+          const objectUrl = URL.createObjectURL(file);
+          let crop = null;
+          try {
+            const { width, height } = await getImageDimensions(objectUrl);
+            crop = getCenteredSquareCrop(width, height);
+          } catch {
+            /* si falla, queda null y el usuario puede recortar */
+          }
+          loaded.push({
+            file,
+            url: objectUrl,
+            name: fileName,
+            crop,
+            id: generateId(),
+          });
+        } catch {
+          /* skip si falla la carga */
+        }
+      }
+      if (loaded.length > 0) {
+        const firstNewIndex = images.length;
+        setImages((prev) => [...prev, ...loaded]);
+        if (selectedIndex < 0) setSelectedIndex(firstNewIndex);
+      }
+    } finally {
+      setAddingDefaultPhrases(false);
+    }
+  };
+
   const removeAt = (idx) => {
     const next = images.filter((_, i) => i !== idx);
     URL.revokeObjectURL(images[idx].url);
@@ -330,47 +426,61 @@ const ImageEditor = () => {
           </div>
         </div>
 
-        <div className="client-data-form-group">
-          <label>
-            <span className="label-icon" aria-hidden>✂️</span>
-            Recortar Imágenes
-          </label>
-        </div>
-
-        <div className="image-editor-controls">
-          <div className="image-editor-controls-left">
-            <input
-              key={fileInputKey}
-              type="file"
-              id="image-editor-file"
-              accept="image/*"
-              multiple
-              onChange={handleFileChange}
-              className="image-editor-file-input"
-            />
-            <span className="image-editor-file-status">
-              {images.length === 0 ? 'Sin archivos seleccionados' : `${images.length} archivo(s)`}
-            </span>
-            <button type="button" className="btn btn-secondary" onClick={clearAll} disabled={images.length === 0}>
-              Limpiar todas
+        <section className="image-editor-actions-section" aria-label="Acciones de imágenes">
+          <div className="image-editor-actions-header">
+            <h2 className="image-editor-actions-title">
+              <span className="label-icon" aria-hidden>✂️</span>
+              Recortar Imágenes
+            </h2>
+          </div>
+          <div className="image-editor-controls">
+            <div className="image-editor-controls-left">
+              <input
+                key={fileInputKey}
+                type="file"
+                id="image-editor-file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="image-editor-file-input"
+              />
+              <button type="button" className="btn btn-secondary image-editor-clear-btn" onClick={clearAll} disabled={images.length === 0}>
+                Limpiar todas
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary image-editor-submit-btn"
+              onClick={handleSubmit}
+              disabled={!allHaveCrops || submitting}
+            >
+              {submitting ? 'Enviando...' : remaining > 0 ? `Enviar (necesitas ${remaining} más)` : 'Enviar'}
             </button>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary image-editor-submit-btn"
-            onClick={handleSubmit}
-            disabled={!allHaveCrops || submitting}
-          >
-            {submitting ? 'Enviando...' : remaining > 0 ? `Enviar (necesitas ${remaining} más)` : 'Enviar'}
-          </button>
+        </section>
+
+        <div className="image-editor-warning" role="alert">
+          <span className="image-editor-warning-icon" aria-hidden>⚠️</span>
+          <p className="image-editor-warning-text">
+            <strong>Importante:</strong> El orden de las fotos se puede modificar arrastrándolas (PC) o con los botones ◀▶ (móvil). El orden aquí será el orden final en la cajita.
+          </p>
         </div>
 
-        <div className="image-editor-warning">
-          <span className="image-editor-warning-icon" aria-hidden>⚠️</span>
-          <div className="image-editor-warning-text">
-            <strong>Importante:</strong> El orden de las fotos se puede modificar arrastrándolas (PC) o con los botones ◀▶ (móvil). El orden aquí será el orden final en la cajita.
-          </div>
-        </div>
+        <section className="image-editor-canva-section" aria-label="Imágenes con frases">
+          <p className="image-editor-canva-note image-editor-canva-note--global">
+            ¿Querés una imagen personalizada con tu frase? Te recomendamos diseñarla en{' '}
+            <a href="https://www.canva.com/" target="_blank" rel="noopener noreferrer">Canva</a>.
+          </p>
+          <button
+            type="button"
+            className="btn image-editor-phrase-btn"
+            onClick={openPhraseModal}
+            disabled={images.length >= REQUIRED_COUNT || addingDefaultPhrases}
+            title={images.length >= REQUIRED_COUNT ? 'Ya tenés 10 imágenes' : 'Elegir imágenes con frases'}
+          >
+            {addingDefaultPhrases ? 'Cargando...' : 'Imágenes con frases'}
+          </button>
+        </section>
 
         <div className="image-editor-thumbs">
         {images.map((img, i) => (
@@ -451,6 +561,10 @@ const ImageEditor = () => {
             <p className="image-editor-drop-note">
               <strong>Formato:</strong> Imágenes JPG, PNG o similares. Máximo 10 imágenes.
             </p>
+            <p className="image-editor-canva-note">
+              Si querés una imagen personalizada con tu propia frase, te recomendamos diseñarla en{' '}
+              <a href="https://www.canva.com/" target="_blank" rel="noopener noreferrer">Canva</a>.
+            </p>
           </div>
         ) : null}
         </div>
@@ -467,6 +581,44 @@ const ImageEditor = () => {
           </button>
         </div>
       </div>
+
+      {showPhraseModal && (
+        <div className="image-editor-modal-overlay" onClick={() => setShowPhraseModal(false)}>
+          <div className="image-editor-phrase-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="image-editor-phrase-modal-title">Elegí imágenes con frases</h3>
+            <p className="image-editor-phrase-modal-hint">
+              Podés agregar hasta {Math.min(REQUIRED_COUNT - images.length, DEFAULT_PHRASE_IMAGES.length)} más. Clic para seleccionar.
+            </p>
+            <div className="image-editor-phrase-grid">
+              {DEFAULT_PHRASE_IMAGES.map((item, idx) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  className={`image-editor-phrase-option ${selectedPhraseIndexes.includes(idx) ? 'selected' : ''}`}
+                  onClick={() => togglePhraseSelection(idx)}
+                >
+                  <img src={getDefaultPhraseImageUrl(item.path)} alt={item.name} />
+                  <span className="image-editor-phrase-option-label">{item.name}</span>
+                  {selectedPhraseIndexes.includes(idx) && <span className="image-editor-phrase-check" aria-hidden>✓</span>}
+                </button>
+              ))}
+            </div>
+            <div className="image-editor-phrase-modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowPhraseModal(false)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={addSelectedPhraseImages}
+                disabled={selectedPhraseIndexes.length === 0}
+              >
+                Agregar {selectedPhraseIndexes.length ? `(${selectedPhraseIndexes.length})` : ''} seleccionadas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {orderConfirmed && order && (
         <div className="order-confirmed-overlay" onClick={() => { sessionStorage.removeItem(EDITOR_ORDER_KEY); navigate('/'); }}>
