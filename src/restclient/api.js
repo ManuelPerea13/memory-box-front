@@ -126,6 +126,28 @@ const api = {
   deleteImageCrop(id) {
     return this.delete(`api/image-crops/${id}/`);
   },
+
+  // Stock (admin)
+  getStock() {
+    return this.get('api/stock/');
+  },
+
+  addStock(variant, amount) {
+    return this.post('api/stock/add_stock/', { variant, amount });
+  },
+
+  setStock(variant, quantity) {
+    return this.post('api/stock/set_stock/', { variant, quantity });
+  },
+
+  // Precios y datos de transferencia (público GET; PATCH con auth)
+  getPrices(authenticated = false) {
+    return this.get('api/settings/prices/', authenticated);
+  },
+
+  updatePrices(data) {
+    return this.patch('api/settings/prices/', data);
+  },
 };
 
 export default api;

@@ -6,6 +6,9 @@ import ImageEditor from '../pages/ImageEditor';
 import PedidoView from '../pages/PedidoView';
 import AdminLogin from '../pages/admin/Login';
 import AdminDashboard from '../pages/admin/Dashboard';
+import AdminStock from '../pages/admin/Stock';
+import AdminPrecios from '../pages/admin/Precios';
+import AdminLayout from '../components/admin/AdminLayout';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 
 const MainRouting = () => {
@@ -18,10 +21,14 @@ const MainRouting = () => {
         path="/admin"
         element={
           <ProtectedRoute>
-            <AdminDashboard />
+            <AdminLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<AdminDashboard />} />
+        <Route path="stock" element={<AdminStock />} />
+        <Route path="precios" element={<AdminPrecios />} />
+      </Route>
       <Route path="/" element={<Home />} />
       <Route path="/cliente" element={<ClientData />} />
       <Route path="/editor" element={<ImageEditor />} />

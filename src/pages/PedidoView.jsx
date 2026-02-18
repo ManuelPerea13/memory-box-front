@@ -13,6 +13,11 @@ const VARIANT_LABELS = {
   marble_light: 'Mármol (Con Luz)',
 };
 
+const LED_TYPE_LABELS = {
+  warm_led: 'LED Cálido',
+  white_led: 'LED Blanco',
+};
+
 const SHIPPING_LABELS = {
   pickup_uber: 'Retiro / Uber',
   shipping_province: 'Envío a otra provincia',
@@ -42,6 +47,7 @@ const PedidoView = () => {
   }, [id]);
 
   const boxTypeLabel = order?.box_type === 'with_light' ? 'Con Luz' : 'Sin Luz';
+  const ledTypeLabel = order?.led_type ? (LED_TYPE_LABELS[order.led_type] ?? order.led_type) : '';
   const variantLabel = order?.variant ? (VARIANT_LABELS[order.variant] ?? order.variant.replace(/_/g, ' ')) : '';
   const shippingLabel = order?.shipping_option ? (SHIPPING_LABELS[order.shipping_option] ?? order.shipping_option) : '';
 
@@ -88,6 +94,9 @@ const PedidoView = () => {
           <h2>Selección de la cajita</h2>
           <div className="pedido-view-grid">
             <p><strong>Tipo:</strong> {boxTypeLabel}</p>
+            {order.led_type && (
+              <p><strong>Tipo LED:</strong> {ledTypeLabel}</p>
+            )}
             <p><strong>Variante:</strong> {variantLabel}</p>
             {order.shipping_option && (
               <p><strong>Envío:</strong> {shippingLabel}</p>
@@ -97,7 +106,7 @@ const PedidoView = () => {
 
         {order.status && (
           <div className="pedido-view-section">
-            <p><strong>Estado:</strong> {order.status === 'sent' ? 'Enviado' : order.status}</p>
+            <p><strong>Estado:</strong> {(order.status === 'sent' || order.status === 'in_progress') ? 'En Curso' : order.status}</p>
           </div>
         )}
       </div>

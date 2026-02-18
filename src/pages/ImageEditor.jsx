@@ -4,7 +4,10 @@ import Cropper from 'react-easy-crop';
 import api from '../restclient/api';
 
 const REQUIRED_COUNT = 10;
-const ALIAS = 'manu.perea13';
+const DEFAULT_ALIAS = 'manu.perea13';
+const DEFAULT_TELEFONO = '+54 9 351 392 3790';
+const DEFAULT_EMAIL = 'copiiworld@gmail.com';
+const DEFAULT_DEPOSIT = '$ 12.000';
 
 const VARIANT_LABELS = {
   graphite: 'Grafito',
@@ -16,9 +19,6 @@ const VARIANT_LABELS = {
   black_light: 'Negro',
   marble_light: 'Mármol',
 };
-const TELEFONO = '+54 9 351 392 3790';
-const EMAIL = 'copiiworld@gmail.com';
-const DEPOSIT_AMOUNT = '$ 12.000';
 
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
@@ -54,7 +54,14 @@ const ImageEditor = () => {
   const [zoom, setZoom] = useState(1);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [confirmedData, setConfirmedData] = useState(null);
+  const [pricesSettings, setPricesSettings] = useState(null);
   const cropPixelsRef = useRef(null);
+
+  useEffect(() => {
+    api.getPrices(false).then((data) => {
+      if (data && typeof data === 'object') setPricesSettings(data);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!orderId) {
@@ -478,7 +485,10 @@ const ImageEditor = () => {
             </div>
             <div className="order-confirmed-deposit">
               <span>Monto de la Seña:</span>
-              <span className="order-confirmed-amount">{confirmedData?.deposit_amount ?? DEPOSIT_AMOUNT}</span>
+              <span className="order-confirmed-amount">
+                {confirmedData?.deposit_amount
+                  ?? (pricesSettings?.deposit_amount != null ? `$ ${Number(pricesSettings.deposit_amount).toLocaleString('es-AR')}` : DEFAULT_DEPOSIT)}
+              </span>
             </div>
             <div className="client-data-form-group">
               <label>
@@ -486,9 +496,16 @@ const ImageEditor = () => {
                 Datos para Transferencia
               </label>
               <div className="order-confirmed-transfer">
-                <p><strong>Alias:</strong> {ALIAS} <button type="button" className="btn btn-secondary order-confirmed-copy" onClick={() => navigator.clipboard?.writeText(ALIAS)}>Copiar</button></p>
-                <p><strong>Banco:</strong> Mercado Pago</p>
-                <p><strong>Titular:</strong> Manuel Perea</p>
+                {(() => {
+                  const alias = pricesSettings?.transfer_alias ?? DEFAULT_ALIAS;
+                  return (
+                    <>
+                      <p><strong>Alias:</strong> {alias} <button type="button" className="btn btn-secondary order-confirmed-copy" onClick={() => navigator.clipboard?.writeText(alias)}>Copiar</button></p>
+                      <p><strong>Banco:</strong> {pricesSettings?.transfer_bank ?? 'Mercado Pago'}</p>
+                      <p><strong>Titular:</strong> {pricesSettings?.transfer_holder ?? 'Manuel Perea'}</p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
             <div className="client-data-form-group">
@@ -499,7 +516,7 @@ const ImageEditor = () => {
               <p className="order-confirmed-send-hint">Envía tu comprobante de pago por WhatsApp o correo electrónico para confirmar tu pedido.</p>
               <div className="order-confirmed-send-buttons">
                 <a
-                  href={`https://wa.me/${TELEFONO.replace(/\D/g, '')}?text=${encodeURIComponent('Hola, adjunto el comprobante de pago de mi pedido.')}`}
+                  href={`https://wa.me/${(pricesSettings?.contact_whatsapp ?? DEFAULT_TELEFONO).replace(/\D/g, '')}?text=${encodeURIComponent('Hola, adjunto el comprobante de pago de mi pedido.')}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="order-confirmed-send-btn order-confirmed-whatsapp"
@@ -508,7 +525,7 @@ const ImageEditor = () => {
                   Enviar por WhatsApp
                 </a>
                 <a
-                  href={`mailto:${EMAIL}?subject=${encodeURIComponent('Comprobante de pago - Pedido')}`}
+                  href={`mailto:${pricesSettings?.contact_email ?? DEFAULT_EMAIL}?subject=${encodeURIComponent('Comprobante de pago - Pedido')}`}
                   className="order-confirmed-send-btn order-confirmed-email"
                 >
                   <span className="order-confirmed-send-icon" aria-hidden>✉️</span>
