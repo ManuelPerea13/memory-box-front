@@ -1,0 +1,16 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8000/}
+    image: memory-box-front
+    ports:
+      - "3000:80"
+    networks:
+      - memory-box-front-net
+
+networks:
+  memory-box-front-net:
+    driver: bridge
