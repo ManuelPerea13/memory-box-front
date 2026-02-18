@@ -2,6 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../restclient/api';
 
+// Formatea nombre: primera letra de cada palabra en mayúscula, resto en minúscula.
+// Sin .trim() para no borrar espacios al escribir (igual que catriel-front formatName).
+const formatNombreCompleto = (str) => {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .split(' ')
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : ''))
+    .join(' ');
+};
+
+// Solo lo que ingresa el usuario: código de área + número (10 dígitos). El back agrega +54 9.
+const PHONE_MAX_DIGITS = 10;
+
+// Solo dígitos, espacios y +; no más de PHONE_MAX_DIGITS dígitos. El backend normaliza a E.164.
+const sanitizePhoneInput = (value) => {
+  if (!value || typeof value !== 'string') return '';
+  const cleaned = value.replace(/[^\d\s+]/g, '');
+  let digitCount = 0;
+  let result = '';
+  for (const ch of cleaned) {
+    if (ch >= '0' && ch <= '9') {
+      if (digitCount >= PHONE_MAX_DIGITS) continue;
+      digitCount++;
+    }
+    result += ch;
+  }
+  return result;
+};
+
 // API uses English keys/values; labels shown in Spanish
 const VARIANTS = {
   no_light: [
@@ -41,8 +70,8 @@ const ClientData = () => {
     api.getOrder(editingOrderId).then((o) => {
       if (cancelled) return;
       setForm({
-        nombre_cliente: o.client_name || '',
-        telefono: o.phone || '',
+        nombre_cliente: formatNombreCompleto((o.client_name || '').trim()),
+        telefono: sanitizePhoneInput(o.phone || ''),
         box_type: o.box_type || 'no_light',
         led_type: o.led_type || 'warm_led',
         variant: o.variant || '',
@@ -57,7 +86,14 @@ const ClientData = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => {
-      const next = { ...prev, [name]: value };
+      const next = { ...prev };
+      if (name === 'nombre_cliente') {
+        next.nombre_cliente = formatNombreCompleto(value);
+      } else if (name === 'telefono') {
+        next.telefono = sanitizePhoneInput(value);
+      } else {
+        next[name] = value;
+      }
       if (name === 'box_type') {
         next.variant = '';
         if (value === 'no_light') next.led_type = '';
@@ -81,7 +117,7 @@ const ClientData = () => {
     setError(null);
     try {
       const payload = {
-        client_name: form.nombre_cliente,
+        client_name: formatNombreCompleto(form.nombre_cliente.trim()),
         phone: form.telefono,
         box_type: form.box_type,
         variant: form.variant,
@@ -136,7 +172,7 @@ const ClientData = () => {
           <div className="client-data-form-group">
             <label htmlFor="telefono">
               <span className="label-icon" aria-hidden>📱</span>
-              Número de teléfono: *
+              Número de teléfono *
             </label>
             <input
               id="telefono"
@@ -144,9 +180,12 @@ const ClientData = () => {
               name="telefono"
               value={form.telefono}
               onChange={handleChange}
-              placeholder="+54 9 11 1234 5678"
+              placeholder="Ej: 351 339 2082 (sin +54)"
               required
             />
+            <span className="client-data-field-hint" aria-hidden>
+              El backend lo guarda en formato internacional para WhatsApp/Twilio.
+            </span>
           </div>
 
           {/* Tipo de caja */}

@@ -297,6 +297,10 @@ a:hover {
   justify-content: center;
 }
 
+.home-hero-btn-primary,
+.home-hero-btn-primary:hover {
+  text-decoration: none;
+}
 .home-hero-btn-primary {
   display: inline-flex;
   align-items: center;
@@ -669,6 +673,13 @@ a:hover {
 .client-data-form-group input::placeholder,
 .client-data-form-group textarea::placeholder {
   color: #94a3b8;
+}
+
+.client-data-field-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: #64748b;
 }
 
 /* Tipo de caja - Pills compactos */
