@@ -1511,3 +1511,65 @@ a:hover {
 .order-confirmed-home {
   width: 100%;
 }
+
+.order-confirmed-qr {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  text-align: center;
+}
+.order-confirmed-qr label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+}
+.order-confirmed-qr-hint {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0 0 1rem;
+}
+.order-confirmed-qr-img {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+/* PedidoView (QR scan result page) */
+.pedido-view-card {
+  max-width: 480px;
+  margin: 2rem auto;
+}
+.pedido-view-section {
+  margin: 1.25rem 0;
+}
+.pedido-view-section h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 0.5rem;
+}
+.pedido-view-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 8px;
+}
+.pedido-view-grid p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.client-data-message {
+  margin: 0;
+  color: #64748b;
+}

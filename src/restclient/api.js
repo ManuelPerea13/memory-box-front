@@ -1,11 +1,11 @@
-// Usar host actual del navegador en dev para que funcione por IP (ej. 192.168.88.100)
-const getDefaultApiUrl = () => {
+// En el navegador usar siempre el host actual (así desde el celular usa la IP, no localhost)
+const getBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     return `http://${window.location.hostname}:8000/`;
   }
-  return 'http://localhost:8000/';
+  return process.env.REACT_APP_API_URL || 'http://localhost:8000/';
 };
-const BASE_URL = process.env.REACT_APP_API_URL || getDefaultApiUrl();
+const BASE_URL = getBaseUrl();
 
 const getHeaders = (authenticated = true) => {
   const headers = { 'Content-Type': 'application/json' };

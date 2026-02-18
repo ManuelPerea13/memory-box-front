@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Home from '../pages/Home';
 import ClientData from '../pages/ClientData';
 import ImageEditor from '../pages/ImageEditor';
+import PedidoView from '../pages/PedidoView';
 import AdminLogin from '../pages/admin/Login';
 import AdminDashboard from '../pages/admin/Dashboard';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
@@ -24,6 +25,7 @@ const MainRouting = () => {
       <Route path="/" element={<Home />} />
       <Route path="/cliente" element={<ClientData />} />
       <Route path="/editor" element={<ImageEditor />} />
+      <Route path="/pedido/:id" element={<PedidoView />} />
       <Route path="/" element={<Navigate to="/" replace />} />
       <Route path="*" element={<div>Página no encontrada</div>} />
     </Routes>
