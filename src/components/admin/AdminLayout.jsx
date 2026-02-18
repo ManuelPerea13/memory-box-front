@@ -165,8 +165,9 @@ const AdminLayout = () => {
                         type="button"
                         className="admin-notification-item"
                         onClick={() => {
+                          setNotifications((prev) => prev.filter((notif) => notif.id !== n.id));
                           setDropdownOpen(false);
-                          navigate('/admin');
+                          navigate(`/admin?ver=${n.orderId}`);
                         }}
                       >
                         <span className="admin-notification-item-title">Nuevo pedido #{n.orderId}</span>

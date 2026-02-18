@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../restclient/api';
 
 const STATUS_LABELS = {
@@ -59,6 +60,7 @@ const getMediaUrl = (path) => {
 const isEnCurso = (s) => s === 'in_progress' || s === 'sent';
 
 const AdminDashboard = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -66,11 +68,12 @@ const AdminDashboard = () => {
   const [showHiddenOrders, setShowHiddenOrders] = useState(false);
   const [detailOrder, setDetailOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [previewImageUrl, setPreviewImageUrl] = useState(null);
+  const [previewGallery, setPreviewGallery] = useState(null); // { urls: string[], currentIndex: number }
   const [updatingSenaId, setUpdatingSenaId] = useState(null);
   const [hidingOrderId, setHidingOrderId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const previewOverlayRef = useRef(null);
 
   const loadOrders = useCallback((silent = false, includeHidden = false) => {
     if (!silent) setLoading(true);
@@ -102,6 +105,12 @@ const AdminDashboard = () => {
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [openMenuId]);
+
+  useEffect(() => {
+    if (previewGallery && previewOverlayRef.current) {
+      previewOverlayRef.current.focus();
+    }
+  }, [previewGallery]);
 
   const onToggleShowHidden = () => {
     const next = !showHiddenOrders;
@@ -140,6 +149,13 @@ const AdminDashboard = () => {
       .catch(() => setDetailOrder(null))
       .finally(() => setDetailLoading(false));
   };
+
+  useEffect(() => {
+    const verId = searchParams.get('ver');
+    if (!verId) return;
+    openDetail(Number(verId));
+    setSearchParams({}, { replace: true });
+  }, [searchParams]);
 
   const hideDraft = (e, orderId) => {
     e.preventDefault();
@@ -430,25 +446,67 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {previewImageUrl && (
+      {previewGallery && previewGallery.urls.length > 0 && (
         <div
+          ref={previewOverlayRef}
           className="admin-preview-overlay"
-          onClick={() => setPreviewImageUrl(null)}
+          onClick={() => setPreviewGallery(null)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Escape' && setPreviewImageUrl(null)}
-          aria-label="Cerrar previsualización"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setPreviewGallery(null);
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              setPreviewGallery((g) => ({
+                ...g,
+                currentIndex: (g.currentIndex - 1 + g.urls.length) % g.urls.length,
+              }));
+            }
+            if (e.key === 'ArrowRight') {
+              e.preventDefault();
+              setPreviewGallery((g) => ({
+                ...g,
+                currentIndex: (g.currentIndex + 1) % g.urls.length,
+              }));
+            }
+          }}
+          aria-label="Vista previa de imagen"
         >
-          <img
-            src={previewImageUrl}
-            alt="Vista previa"
-            className="admin-preview-img"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            type="button"
+            className="admin-preview-nav admin-preview-nav-left"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewGallery((g) => ({
+                ...g,
+                currentIndex: (g.currentIndex - 1 + g.urls.length) % g.urls.length,
+              }));
+            }}
+            aria-label="Foto anterior"
+          />
+          <div className="admin-preview-img-wrap" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={previewGallery.urls[previewGallery.currentIndex]}
+              alt={`Vista previa ${previewGallery.currentIndex + 1} de ${previewGallery.urls.length}`}
+              className="admin-preview-img"
+            />
+          </div>
+          <button
+            type="button"
+            className="admin-preview-nav admin-preview-nav-right"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewGallery((g) => ({
+                ...g,
+                currentIndex: (g.currentIndex + 1) % g.urls.length,
+              }));
+            }}
+            aria-label="Foto siguiente"
           />
           <button
             type="button"
             className="admin-preview-close"
-            onClick={() => setPreviewImageUrl(null)}
+            onClick={() => setPreviewGallery(null)}
             aria-label="Cerrar"
           >
             ×
@@ -457,7 +515,7 @@ const AdminDashboard = () => {
       )}
 
       {detailOrder && !detailLoading && (
-        <div className="admin-detail-overlay" onClick={() => { setDetailOrder(null); setPreviewImageUrl(null); }}>
+        <div className="admin-detail-overlay" onClick={() => { setDetailOrder(null); setPreviewGallery(null); }}>
           <div className="client-data-card admin-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="admin-detail-header">
               <h2>Pedido #{detailOrder.id}</h2>
@@ -517,7 +575,11 @@ const AdminDashboard = () => {
                   </p>
                 </div>
               )}
-              {detailOrder.image_crops && detailOrder.image_crops.length > 0 && (
+              {detailOrder.image_crops && detailOrder.image_crops.length > 0 && (() => {
+                const previewUrls = (detailOrder.image_crops || [])
+                  .filter((c) => c.image)
+                  .map((c) => getMediaUrl(c.image));
+                return (
                 <div className="admin-detail-section">
                   <h3>Imágenes ({detailOrder.image_crops.length})</h3>
                   <div className="admin-detail-images">
@@ -528,7 +590,7 @@ const AdminDashboard = () => {
                           key={crop.id}
                           type="button"
                           className="admin-detail-thumb"
-                          onClick={() => url && setPreviewImageUrl(url)}
+                          onClick={() => url && setPreviewGallery({ urls: previewUrls, currentIndex: previewUrls.indexOf(url) })}
                           disabled={!url}
                         >
                           {url ? (
@@ -541,7 +603,8 @@ const AdminDashboard = () => {
                     })}
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>

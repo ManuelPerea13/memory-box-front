@@ -2245,19 +2245,31 @@ a:hover {
 .admin-preview-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: #0f0f0f;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1001;
   padding: 2rem;
 }
-.admin-preview-img {
+.admin-preview-img-wrap {
+  display: inline-block;
+  line-height: 0;
   max-width: 95vw;
   max-height: 90vh;
+  background: transparent;
+}
+.admin-preview-img {
+  display: block;
+  max-width: 100%;
+  max-height: 90vh;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  background: transparent;
+  vertical-align: middle;
 }
 .admin-preview-close {
   position: absolute;
@@ -2280,6 +2292,51 @@ a:hover {
 }
 .admin-preview-close:hover {
   background: #fff;
+}
+.admin-preview-nav {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20%;
+  max-width: 120px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  z-index: 2;
+  transition: background 0.2s ease;
+}
+.admin-preview-nav:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.admin-preview-nav:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+.admin-preview-nav::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 2rem;
+  height: 2rem;
+  margin-top: -1rem;
+  border: solid rgba(255, 255, 255, 0.9);
+  border-width: 0 3px 3px 0;
+  border-radius: 2px;
+}
+.admin-preview-nav-left {
+  left: 0;
+}
+.admin-preview-nav-left::after {
+  left: 1rem;
+  transform: rotate(135deg);
+}
+.admin-preview-nav-right {
+  right: 0;
+}
+.admin-preview-nav-right::after {
+  right: 1rem;
+  left: auto;
+  transform: rotate(-45deg);
 }
 @media (max-width: 640px) {
   .admin-dashboard-header-top {
