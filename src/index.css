@@ -2572,6 +2572,49 @@ a:hover {
 .admin-stock-page .client-data-card.admin-stock-form-card {
   max-width: 420px;
 }
+.admin-stock-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.admin-stock-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.admin-stock-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  letter-spacing: 0.02em;
+  color: #1e293b;
+  width: 100%;
+  max-width: 800px;
+  box-sizing: border-box;
+}
+.admin-stock-section-title--no-light {
+  background: #e0f2fe;
+  border-left: 4px solid #0284c7;
+  color: #0369a1;
+}
+.admin-stock-section-title--with-light {
+  background: #fef3c7;
+  border-left: 4px solid #d97706;
+  color: #b45309;
+}
+@media (max-width: 900px) {
+  .admin-stock-section-title {
+    max-width: 420px;
+  }
+}
+@media (max-width: 480px) {
+  .admin-stock-section-title {
+    max-width: 240px;
+  }
+}
+
 .admin-stock-grid {
   display: grid;
   gap: 1rem;

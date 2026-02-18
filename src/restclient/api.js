@@ -137,12 +137,12 @@ const api = {
     return this.get('api/stock/');
   },
 
-  addStock(variant, amount) {
-    return this.post('api/stock/add_stock/', { variant, amount });
+  addStock(variant, boxType, amount) {
+    return this.post('api/stock/add_stock/', { variant, box_type: boxType, amount });
   },
 
-  setStock(variant, quantity) {
-    return this.post('api/stock/set_stock/', { variant, quantity });
+  setStock(variant, boxType, quantity) {
+    return this.post('api/stock/set_stock/', { variant, box_type: boxType, quantity });
   },
 
   // Precios y datos de transferencia (público GET; PATCH con auth)
