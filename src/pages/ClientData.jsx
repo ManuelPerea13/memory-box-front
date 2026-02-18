@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../restclient/api';
 
 // API uses English keys/values; labels shown in Spanish
@@ -20,6 +20,9 @@ const VARIANTS = {
 
 const ClientData = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const editingOrderId = location.state?.orderId;
+  const [loadingOrder, setLoadingOrder] = useState(!!editingOrderId);
   const [form, setForm] = useState({
     nombre_cliente: '',
     telefono: '',
@@ -31,6 +34,25 @@ const ClientData = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [modalVariant, setModalVariant] = useState(null);
+
+  useEffect(() => {
+    if (!editingOrderId) return;
+    let cancelled = false;
+    api.getOrder(editingOrderId).then((o) => {
+      if (cancelled) return;
+      setForm({
+        nombre_cliente: o.client_name || '',
+        telefono: o.phone || '',
+        box_type: o.box_type || 'no_light',
+        led_type: o.led_type || 'warm_led',
+        variant: o.variant || '',
+        shipping_option: o.shipping_option || 'pickup_uber',
+      });
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setLoadingOrder(false);
+    });
+    return () => { cancelled = true; };
+  }, [editingOrderId]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -66,8 +88,13 @@ const ClientData = () => {
         shipping_option: form.shipping_option,
       };
       if (form.box_type === 'with_light') payload.led_type = form.led_type;
-      const order = await api.createOrder(payload);
-      navigate(`/editor/${order.id}`);
+      if (editingOrderId) {
+        await api.updateOrder(editingOrderId, payload);
+        navigate('/editor', { state: { orderId: editingOrderId } });
+      } else {
+        const order = await api.createOrder(payload);
+        navigate('/editor', { state: { orderId: order.id } });
+      }
     } catch (err) {
       setError(err.message || 'Error al crear el pedido');
     } finally {
@@ -86,7 +113,7 @@ const ClientData = () => {
             <span className="client-data-icon" aria-hidden>📦</span>
             Pedido de Caja de la Memoria
           </h1>
-          <p>Completa los datos del cliente para continuar</p>
+          <p>{editingOrderId ? 'Modifica los datos y vuelve al editor con tus imágenes' : 'Completa los datos del cliente para continuar'}</p>
         </header>
 
         <form onSubmit={handleSubmit}>
@@ -222,8 +249,8 @@ const ClientData = () => {
             <Link to="/" className="btn btn-secondary client-data-btn-back">
               ← Volver al Inicio
             </Link>
-            <button type="submit" className="btn btn-primary client-data-btn-submit" disabled={loading}>
-              {loading ? 'Creando...' : 'Selección de Imágenes →'}
+            <button type="submit" className="btn btn-primary client-data-btn-submit" disabled={loading || loadingOrder}>
+              {loading ? (editingOrderId ? 'Guardando...' : 'Creando...') : loadingOrder ? 'Cargando...' : editingOrderId ? 'Guardar y volver al editor' : 'Selección de Imágenes →'}
             </button>
           </div>
         </form>

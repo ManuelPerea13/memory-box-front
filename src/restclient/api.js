@@ -59,8 +59,8 @@ const api = {
     return request(url, 'POST', data, authenticated);
   },
 
-  put(url, data) {
-    return request(url, 'PUT', data);
+  put(url, data, authenticated = true) {
+    return request(url, 'PUT', data, authenticated);
   },
 
   patch(url, data) {
@@ -89,11 +89,25 @@ const api = {
   },
 
   updateOrder(id, data) {
-    return this.put(`api/orders/${id}/`, data);
+    return this.put(`api/orders/${id}/`, data, false);
   },
 
   sendOrder(id) {
-    return this.post(`api/orders/${id}/send_order/`, {});
+    return this.post(`api/orders/${id}/send_order/`, {}, false);
+  },
+
+  submitOrderImages(orderId, formData) {
+    return fetch(`${BASE_URL}api/orders/${orderId}/submit_images/`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Request failed: ${res.status}`);
+      }
+      return res.json();
+    });
   },
 
   // Image crops (backend: /api/image-crops/)

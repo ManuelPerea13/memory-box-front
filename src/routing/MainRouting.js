@@ -23,7 +23,7 @@ const MainRouting = () => {
       />
       <Route path="/" element={<Home />} />
       <Route path="/cliente" element={<ClientData />} />
-      <Route path="/editor/:pedidoId" element={<ImageEditor />} />
+      <Route path="/editor" element={<ImageEditor />} />
       <Route path="/" element={<Navigate to="/" replace />} />
       <Route path="*" element={<div>Página no encontrada</div>} />
     </Routes>
