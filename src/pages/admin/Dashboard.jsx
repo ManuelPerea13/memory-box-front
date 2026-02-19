@@ -1,6 +1,21 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import JSZip from 'jszip';
 import api from '../../restclient/api';
+
+const getExtension = (pathOrUrl) => {
+  if (!pathOrUrl) return '.jpg';
+  const match = pathOrUrl.match(/\.(jpe?g|png|gif|webp)(\?|$)/i);
+  return match ? '.' + match[1].toLowerCase() : '.jpg';
+};
+
+const sanitizeFileName = (name) => {
+  if (!name || typeof name !== 'string') return 'cliente';
+  return name
+    .replace(/[/\\:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim() || 'cliente';
+};
 
 const STATUS_LABELS = {
   draft: 'Borrador',
@@ -50,11 +65,31 @@ const getBaseUrl = () => {
   return 'http://localhost:8000';
 };
 
+/** Path for media: backend serves at /media/; API may return path with or without /media/. */
+const toMediaPath = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  const raw = path.startsWith('/') ? path.slice(1) : path;
+  const withMedia = raw.startsWith('media/') ? `/${raw}` : `/media/${raw}`;
+  return withMedia;
+};
+
 const getMediaUrl = (path) => {
   if (!path) return null;
   if (path.startsWith('http')) return path;
-  const base = getBaseUrl();
-  return base + (path.startsWith('/') ? path : `/${path}`);
+  const p = toMediaPath(path);
+  return p ? getBaseUrl() + p : null;
+};
+
+/** URL for fetch: use full backend URL as-is if provided; otherwise same-origin (proxy). */
+const getMediaUrlSameOrigin = (path) => {
+  if (!path) return null;
+  // API can return full URL (e.g. http://192.168.88.100:8000/media/...) — use as-is
+  if (path.startsWith('http')) return path;
+  if (typeof window === 'undefined') return getBaseUrl() + toMediaPath(path);
+  const p = toMediaPath(path);
+  if (!p) return null;
+  return `${window.location.origin}${p}`;
 };
 
 const isEnCurso = (s) => s === 'in_progress' || s === 'sent';
@@ -73,6 +108,8 @@ const AdminDashboard = () => {
   const [hidingOrderId, setHidingOrderId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [downloadingZipId, setDownloadingZipId] = useState(null);
+  const [zipError, setZipError] = useState(null);
   const previewOverlayRef = useRef(null);
 
   const loadOrders = useCallback((silent = false, includeHidden = false) => {
@@ -155,7 +192,7 @@ const AdminDashboard = () => {
     if (!verId) return;
     openDetail(Number(verId));
     setSearchParams({}, { replace: true });
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
   const hideDraft = (e, orderId) => {
     e.preventDefault();
@@ -227,6 +264,102 @@ const AdminDashboard = () => {
       });
   };
 
+  const downloadOrderZip = useCallback(async (order) => {
+    if (downloadingZipId != null) return;
+    setOpenMenuId(null);
+    setZipError(null);
+    setDownloadingZipId(order.id);
+    try {
+      const orderDetail = await api.getOrder(order.id);
+      const crops = (orderDetail.image_crops || []).slice(0, 10);
+      const qrPath = orderDetail.qr_code;
+      const ext = crops.length > 0 && crops[0].image
+        ? getExtension(crops[0].image)
+        : '.jpg';
+
+      const zip = new JSZip();
+      const opts = { credentials: 'include' };
+
+      for (let i = 0; i < crops.length; i++) {
+        const path = crops[i].image;
+        if (!path) continue;
+        const url = getMediaUrlSameOrigin(path);
+        if (!url) continue;
+        const res = await fetch(url, opts);
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        zip.file(`${i + 1}${ext}`, blob);
+      }
+
+      if (qrPath) {
+        const qrUrl = getMediaUrlSameOrigin(qrPath);
+        let qrBlob = null;
+        if (crops.length > 0 && crops[0].image) {
+          try {
+            const firstUrl = getMediaUrlSameOrigin(crops[0].image);
+            const size = await new Promise((resolve, reject) => {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+              img.onerror = reject;
+              img.src = firstUrl;
+            });
+            qrBlob = await new Promise((resolve, reject) => {
+              const qrImg = new Image();
+              qrImg.crossOrigin = 'anonymous';
+              qrImg.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size.w;
+                canvas.height = size.h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(qrImg, 0, 0, size.w, size.h);
+                canvas.toBlob(
+                  (b) => (b ? resolve(b) : reject(new Error('canvas toBlob failed'))),
+                  'image/jpeg',
+                  0.92
+                );
+              };
+              qrImg.onerror = reject;
+              qrImg.src = qrUrl;
+            });
+          } catch {
+            const res = await fetch(qrUrl, opts);
+            if (res.ok) qrBlob = await res.blob();
+          }
+        } else {
+          const res = await fetch(qrUrl, opts);
+          if (res.ok) qrBlob = await res.blob();
+        }
+        if (qrBlob) zip.file(`11${ext}`, qrBlob);
+      }
+
+      const date = orderDetail.created_at ? new Date(orderDetail.created_at) : new Date();
+      const yyyymmdd =
+        date.getFullYear() +
+        String(date.getMonth() + 1).padStart(2, '0') +
+        String(date.getDate()).padStart(2, '0');
+      const name = sanitizeFileName(orderDetail.client_name);
+      const filename = `${yyyymmdd}-${name}.zip`;
+
+      const count = Object.keys(zip.files).length;
+      if (count === 0) {
+        setZipError('No se pudo obtener ninguna imagen. ¿El pedido tiene imágenes subidas?');
+        return;
+      }
+      const content = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      console.error('Error al generar zip:', err);
+      setZipError(err?.message || 'Error al generar el zip. Revisa la consola.');
+    } finally {
+      setDownloadingZipId(null);
+    }
+  }, [downloadingZipId]);
+
   const boxTypeLabel = (v) => (v ? BOX_TYPE_LABELS[v] ?? v : '');
   const ledTypeLabel = (v) => (v ? LED_TYPE_LABELS[v] ?? v : '');
   const shippingLabel = (v) => (v ? SHIPPING_LABELS[v] ?? v : '');
@@ -241,6 +374,12 @@ const AdminDashboard = () => {
       </header>
 
       <div className="client-data-card admin-dashboard-card">
+        {zipError && (
+          <div className="admin-zip-error" role="alert">
+            <span>{zipError}</span>
+            <button type="button" onClick={() => setZipError(null)} aria-label="Cerrar">×</button>
+          </div>
+        )}
         <section className="admin-dashboard-stats">
           <div className="admin-stat">
             <span className="admin-stat-value">{stats.total}</span>
@@ -374,6 +513,15 @@ const AdminDashboard = () => {
                                 }}
                               >
                                 Ver
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="admin-orders-dropdown-item admin-orders-dropdown-zip"
+                                disabled={downloadingZipId === p.id}
+                                onClick={() => downloadOrderZip(p)}
+                              >
+                                {downloadingZipId === p.id ? '...' : 'Descargar zip'}
                               </button>
                               {p.status === 'draft' && p.active !== false && (
                                 <button
