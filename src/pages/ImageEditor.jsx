@@ -22,11 +22,29 @@ const VARIANT_LABELS = {
 
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
-// Imágenes por defecto con frases (estáticas en public/default-phrases/)
-const DEFAULT_PHRASE_IMAGES = [
-  { path: 'default-phrases/frase-contigo.png', name: 'Querés ser mi novia?' },
-  { path: 'default-phrases/frase-felicidad.png', name: 'Llenas de felicidad mi corazón' },
+// Imágenes por defecto con frases (public/default-phrases/), agrupadas por motivo
+const PHRASE_GROUPS = [
+  { id: 'motivo1', label: 'Motivo 1', prefix: 'Motivo1', count: 6 },
+  { id: 'motivo2', label: 'Motivo 2', prefix: 'Motivo2', count: 5 },
+  { id: 'motivo3', label: 'Motivo 3', prefix: 'Motivo3', count: 7 },
 ];
+
+const buildPhraseItems = () => {
+  const flat = [];
+  PHRASE_GROUPS.forEach((g) => {
+    for (let i = 1; i <= g.count; i++) {
+      const num = String(i).padStart(2, '0');
+      flat.push({
+        path: `default-phrases/${g.prefix}-${num}.png`,
+        name: `${g.label} - ${num}`,
+        groupId: g.id,
+      });
+    }
+  });
+  return flat;
+};
+
+const DEFAULT_PHRASE_IMAGES = buildPhraseItems();
 
 const EDITOR_ORDER_KEY = 'editorOrderId';
 const getEditorStateKey = (id) => `editorState_${id}`;
@@ -587,21 +605,35 @@ const ImageEditor = () => {
           <div className="image-editor-phrase-modal" onClick={(e) => e.stopPropagation()}>
             <h3 className="image-editor-phrase-modal-title">Elegí imágenes con frases</h3>
             <p className="image-editor-phrase-modal-hint">
-              Podés agregar hasta {Math.min(REQUIRED_COUNT - images.length, DEFAULT_PHRASE_IMAGES.length)} más. Clic para seleccionar.
+              Clic para seleccionar.
             </p>
-            <div className="image-editor-phrase-grid">
-              {DEFAULT_PHRASE_IMAGES.map((item, idx) => (
-                <button
-                  key={item.path}
-                  type="button"
-                  className={`image-editor-phrase-option ${selectedPhraseIndexes.includes(idx) ? 'selected' : ''}`}
-                  onClick={() => togglePhraseSelection(idx)}
-                >
-                  <img src={getDefaultPhraseImageUrl(item.path)} alt={item.name} />
-                  <span className="image-editor-phrase-option-label">{item.name}</span>
-                  {selectedPhraseIndexes.includes(idx) && <span className="image-editor-phrase-check" aria-hidden>✓</span>}
-                </button>
-              ))}
+            <div className="image-editor-phrase-modal-body">
+              {PHRASE_GROUPS.map((group, groupIndex) => {
+                const startIdx = PHRASE_GROUPS.slice(0, groupIndex).reduce((acc, g) => acc + g.count, 0);
+                const items = DEFAULT_PHRASE_IMAGES.slice(startIdx, startIdx + group.count);
+                return (
+                  <div key={group.id} className="image-editor-phrase-group">
+                    <h4 className="image-editor-phrase-group-title">{group.label}</h4>
+                    <div className="image-editor-phrase-grid">
+                      {items.map((item, i) => {
+                        const globalIdx = startIdx + i;
+                        return (
+                          <button
+                            key={item.path}
+                            type="button"
+                            className={`image-editor-phrase-option ${selectedPhraseIndexes.includes(globalIdx) ? 'selected' : ''}`}
+                            onClick={() => togglePhraseSelection(globalIdx)}
+                          >
+                            <img src={getDefaultPhraseImageUrl(item.path)} alt={item.name} />
+                            <span className="image-editor-phrase-option-label">{item.name}</span>
+                            {selectedPhraseIndexes.includes(globalIdx) && <span className="image-editor-phrase-check" aria-hidden>✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <div className="image-editor-phrase-modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setShowPhraseModal(false)}>
