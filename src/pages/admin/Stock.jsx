@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../restclient/api';
 import useStockWebSocket from '../../hooks/useStockWebSocket';
 
@@ -29,6 +30,20 @@ const AdminStock = () => {
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ variant: 'graphite', boxType: 'no_light', quantity: '' });
+  const [popoverKey, setPopoverKey] = useState(null);
+  const popoverTriggerRef = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (popoverKey == null) return;
+    const closeOnClickOutside = (e) => {
+      if (popoverTriggerRef.current && !popoverTriggerRef.current.contains(e.target)) {
+        setPopoverKey(null);
+      }
+    };
+    document.addEventListener('click', closeOnClickOutside);
+    return () => document.removeEventListener('click', closeOnClickOutside);
+  }, [popoverKey]);
 
   const loadStock = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -100,6 +115,19 @@ const AdminStock = () => {
       return acc;
     }, {});
 
+  const enCursoOrdersByKey = pedidos
+    .filter((p) => isEnCurso(p.status))
+    .reduce((acc, p) => {
+      const base = toBaseVariant(p.variant);
+      const bt = p.box_type || 'no_light';
+      if (base && BASE_VARIANTS.includes(base) && BOX_TYPES.includes(bt)) {
+        const key = stockKey(base, bt);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push({ id: p.id, client_name: p.client_name || '—' });
+      }
+      return acc;
+    }, {});
+
   const buildRow = (v, bt) => {
     const key = stockKey(v, bt);
     const fisico = stockByKey[key] ?? 0;
@@ -165,11 +193,49 @@ const AdminStock = () => {
                     {loading ? '—' : row.stockFisico}
                   </div>
                 </div>
-                <div className="admin-stock-card-block">
+                <div
+                  ref={popoverKey === row.key ? popoverTriggerRef : null}
+                  className="admin-stock-card-block admin-stock-card-block--popover-trigger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPopoverKey((prev) => (prev === row.key ? null : row.key));
+                  }}
+                >
                   <div className="admin-stock-card-label">Pedidos en Curso</div>
                   <div className="admin-stock-card-value admin-stock-card-value--small">
                     {row.enCurso}
                   </div>
+                  {popoverKey === row.key && (enCursoOrdersByKey[row.key]?.length > 0) && (
+                    <div
+                      className="admin-stock-popover"
+                      role="tooltip"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {(enCursoOrdersByKey[row.key] || []).map((o) => (
+                        <div
+                          key={o.id}
+                          className="admin-stock-popover-row admin-stock-popover-row--clickable"
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPopoverKey(null);
+                            navigate(`/admin?ver=${o.id}`);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setPopoverKey(null);
+                              navigate(`/admin?ver=${o.id}`);
+                            }
+                          }}
+                        >
+                          <span className="admin-stock-popover-id">#{o.id}</span>
+                          <span className="admin-stock-popover-name">{o.client_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -193,11 +259,49 @@ const AdminStock = () => {
                     {loading ? '—' : row.stockFisico}
                   </div>
                 </div>
-                <div className="admin-stock-card-block">
+                <div
+                  ref={popoverKey === row.key ? popoverTriggerRef : null}
+                  className="admin-stock-card-block admin-stock-card-block--popover-trigger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPopoverKey((prev) => (prev === row.key ? null : row.key));
+                  }}
+                >
                   <div className="admin-stock-card-label">Pedidos en Curso</div>
                   <div className="admin-stock-card-value admin-stock-card-value--small">
                     {row.enCurso}
                   </div>
+                  {popoverKey === row.key && (enCursoOrdersByKey[row.key]?.length > 0) && (
+                    <div
+                      className="admin-stock-popover"
+                      role="tooltip"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {(enCursoOrdersByKey[row.key] || []).map((o) => (
+                        <div
+                          key={o.id}
+                          className="admin-stock-popover-row admin-stock-popover-row--clickable"
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPopoverKey(null);
+                            navigate(`/admin?ver=${o.id}`);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setPopoverKey(null);
+                              navigate(`/admin?ver=${o.id}`);
+                            }
+                          }}
+                        >
+                          <span className="admin-stock-popover-id">#{o.id}</span>
+                          <span className="admin-stock-popover-name">{o.client_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

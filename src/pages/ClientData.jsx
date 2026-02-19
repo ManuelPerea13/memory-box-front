@@ -185,7 +185,7 @@ const ClientData = () => {
               required
             />
             <span className="client-data-field-hint" aria-hidden>
-              El backend lo guarda en formato internacional para WhatsApp/Twilio.
+              El número correcto es importante para avisarte cuando tu pedido esté listo para retirar o enviar.
             </span>
           </div>
 

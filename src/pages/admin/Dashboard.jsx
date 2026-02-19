@@ -112,19 +112,16 @@ const AdminDashboard = () => {
   const [zipError, setZipError] = useState(null);
   const previewOverlayRef = useRef(null);
 
-  const loadOrders = useCallback((silent = false, includeHidden = false) => {
+  const loadOrders = useCallback((silent = false) => {
     if (!silent) setLoading(true);
     api
-      .getOrders(includeHidden)
+      .getOrders(true)
       .then(setPedidos)
       .catch(() => setPedidos([]))
       .finally(() => setLoading(false));
   }, []);
 
-  const loadOrdersWithCurrentFilter = useCallback(
-    (silent = false) => loadOrders(silent, showHiddenOrders),
-    [loadOrders, showHiddenOrders]
-  );
+  const loadOrdersWithCurrentFilter = useCallback((silent = false) => loadOrders(silent), [loadOrders]);
 
   useEffect(() => {
     loadOrdersWithCurrentFilter();
@@ -150,12 +147,11 @@ const AdminDashboard = () => {
   }, [previewGallery]);
 
   const onToggleShowHidden = () => {
-    const next = !showHiddenOrders;
-    setShowHiddenOrders(next);
-    loadOrders(true, next);
+    setShowHiddenOrders((prev) => !prev);
   };
 
   const filtered = pedidos.filter((p) => {
+    const visible = showHiddenOrders || p.active !== false;
     const matchSearch =
       !search ||
       (p.client_name && p.client_name.toLowerCase().includes(search.toLowerCase())) ||
@@ -164,7 +160,7 @@ const AdminDashboard = () => {
       !statusFilter ||
       p.status === statusFilter ||
       (statusFilter === 'in_progress' && p.status === 'sent');
-    return matchSearch && matchStatus;
+    return visible && matchSearch && matchStatus;
   });
 
   const enCursoCount = pedidos.filter((p) => isEnCurso(p.status)).length;
@@ -523,7 +519,7 @@ const AdminDashboard = () => {
                               >
                                 {downloadingZipId === p.id ? '...' : 'Descargar zip'}
                               </button>
-                              {p.status === 'draft' && p.active !== false && (
+                              {(p.status === 'draft' || p.status === 'delivered') && p.active !== false && (
                                 <button
                                   type="button"
                                   role="menuitem"

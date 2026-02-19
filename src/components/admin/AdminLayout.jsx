@@ -44,6 +44,7 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   const addNotification = useCallback((payload) => {
@@ -90,7 +91,8 @@ const AdminLayout = () => {
   const unreadCount = notifications.length;
 
   return (
-    <div className="admin-layout">
+    <div className={`admin-layout ${sidebarOpen ? 'admin-sidebar-open' : ''}`}>
+      <div className="admin-sidebar-overlay" aria-hidden={!sidebarOpen} onClick={() => setSidebarOpen(false)} />
       <aside className="admin-sidebar">
         <div className="admin-sidebar-brand">
           <span className="admin-sidebar-icon" aria-hidden>📦</span>
@@ -102,6 +104,7 @@ const AdminLayout = () => {
             to="/admin"
             end
             className={({ isActive }) => `admin-sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
           >
             Dashboard
           </NavLink>
@@ -109,12 +112,14 @@ const AdminLayout = () => {
           <NavLink
             to="/admin/stock"
             className={({ isActive }) => `admin-sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
           >
             Stock
           </NavLink>
           <NavLink
             to="/admin/precios"
             className={({ isActive }) => `admin-sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
           >
             Precios
           </NavLink>
@@ -128,6 +133,15 @@ const AdminLayout = () => {
       </aside>
       <div className="admin-main-wrap">
         <header className="admin-topbar">
+          <button
+            type="button"
+            className="admin-sidebar-toggle"
+            onClick={() => setSidebarOpen((o) => !o)}
+            aria-label={sidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
+            aria-expanded={sidebarOpen}
+          >
+            <span className="admin-sidebar-toggle-icon" aria-hidden>☰</span>
+          </button>
           <div className="admin-topbar-right" ref={dropdownRef}>
             <button
               type="button"
