@@ -4,6 +4,9 @@ import Cropper from 'react-easy-crop';
 import JSZip from 'jszip';
 import api from '../../restclient/api';
 
+// Mismo tamaño que el backend (orders/views.py submit_images: 685x685)
+const CROP_OUTPUT_SIZE = 685;
+
 const getCroppedBlob = (imageUrl, pixelCrop) =>
   new Promise((resolve, reject) => {
     const img = new Image();
@@ -11,13 +14,13 @@ const getCroppedBlob = (imageUrl, pixelCrop) =>
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = pixelCrop.width;
-        canvas.height = pixelCrop.height;
+        canvas.width = CROP_OUTPUT_SIZE;
+        canvas.height = CROP_OUTPUT_SIZE;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(
           img,
           pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-          0, 0, pixelCrop.width, pixelCrop.height
+          0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE
         );
         canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))), 'image/jpeg', 0.9);
       } catch (e) {
@@ -835,7 +838,7 @@ const AdminDashboard = () => {
         <div className="admin-detail-overlay admin-crop-editor-overlay">
           <div className="admin-crop-editor-modal">
             <div className="admin-crop-editor-header">
-              <h3>Reemplazar imagen (slot {(cropEditor.crop.slot ?? 0) + 1})</h3>
+              <h3>Reemplazar imagen {(cropEditor.crop.slot ?? 0) + 1}</h3>
               <button
                 type="button"
                 className="admin-detail-close"

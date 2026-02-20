@@ -154,6 +154,14 @@ const ImageEditor = () => {
     }).catch(() => {});
   }, []);
 
+  // Evitar que el scroll del modal propague al fondo
+  useEffect(() => {
+    if (!showPhraseModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [showPhraseModal]);
+
   useEffect(() => {
     if (!orderId) {
       navigate('/cliente', { replace: true });

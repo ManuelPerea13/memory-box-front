@@ -1243,12 +1243,13 @@ a:hover {
   min-height: 400px;
   background: #f8fafc;
   border: 2px dashed #e2e8f0;
-  border-radius: 10px;
-  padding: 1rem;
+  border-radius: 16px;
+  padding: 1.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .image-editor-buttons {
@@ -1257,13 +1258,13 @@ a:hover {
 
 .image-editor-main.image-editor-drop-zone.image-editor-drop-zone--empty {
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
 }
 
 .image-editor-main.image-editor-drop-zone--empty:hover,
 .image-editor-main.image-editor-drop-zone.is-dragging {
   background: #f1f5f9;
   border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
 }
 
 .image-editor-empty {
@@ -1272,65 +1273,72 @@ a:hover {
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 2rem;
+  padding: 2.5rem 2rem;
   text-align: center;
+  max-width: 420px;
 }
 
 .image-editor-drop-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.875rem;
 }
 
 .image-editor-drop-icon {
-  font-size: 4rem;
+  font-size: 3.5rem;
   line-height: 1;
-  color: #999;
+  opacity: 0.85;
   margin-bottom: 0.25rem;
+  filter: grayscale(0.2);
 }
 
 .image-editor-drop-primary {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.2rem;
   font-weight: 600;
-  color: #333;
+  color: #0f172a;
+  letter-spacing: -0.01em;
 }
 
 .image-editor-drop-secondary {
   margin: 0;
-  font-size: 0.95rem;
-  color: #777;
+  font-size: 0.9375rem;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 .image-editor-drop-btn {
   display: inline-block;
-  padding: 0.65rem 1.25rem;
-  margin-top: 0.5rem;
-  font-size: 0.95rem;
+  padding: 0.75rem 1.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: #fff;
   background: #3b82f6;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 
 .image-editor-drop-btn:hover {
   background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
 }
 
 .image-editor-drop-note {
-  margin: 1.5rem 0 0 0;
-  padding-top: 1rem;
-  border-top: 1px solid #eee;
+  margin: 1.75rem 0 0 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e2e8f0;
   font-size: 0.875rem;
-  color: #666;
+  color: #64748b;
+  line-height: 1.5;
 }
 
 .image-editor-drop-note strong {
-  color: #333;
+  color: #334155;
 }
 
 .image-editor-canva-section {
@@ -1453,6 +1461,8 @@ a:hover {
   justify-content: center;
   z-index: 1000;
   padding: 1rem;
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 .image-editor-phrase-modal {
@@ -1482,6 +1492,7 @@ a:hover {
 
 .image-editor-phrase-modal-body {
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
   min-height: 0;
   margin: 0 -0.25rem 1rem 0;
@@ -2726,34 +2737,70 @@ a:hover {
   background: #f1f5f9;
 }
 
+/* Overlay del modal de reemplazo de imagen */
+.admin-crop-editor-overlay {
+  padding: 1.5rem;
+}
 .admin-crop-editor-modal {
   background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  max-width: 520px;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.06);
+  max-width: 440px;
   width: 100%;
   max-height: 90vh;
   overflow: auto;
-  padding: 1.25rem;
+  padding: 0;
 }
 .admin-crop-editor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 1rem;
 }
 .admin-crop-editor-header h3 {
   margin: 0;
-  font-size: 1.1rem;
-  color: #1e293b;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+.admin-crop-editor-modal .admin-detail-close {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: transparent;
+  color: #64748b;
+  border-radius: 10px;
+}
+.admin-crop-editor-modal .admin-detail-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 .admin-crop-editor-select {
-  padding: 1rem 0;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
 }
 .admin-crop-editor-select p {
-  margin: 0 0 1rem;
+  margin: 0 0 1.25rem;
   color: #475569;
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.admin-crop-editor-select .btn {
+  min-width: 180px;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  border-radius: 10px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.admin-crop-editor-select .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
 }
 .admin-crop-editor-file-hidden {
   position: absolute;
@@ -2762,19 +2809,27 @@ a:hover {
   opacity: 0;
   pointer-events: none;
 }
+.admin-crop-editor-crop {
+  padding: 0 1.5rem 1.5rem;
+}
 .admin-crop-editor-crop-wrap {
   position: relative;
   width: 100%;
   height: 380px;
-  margin-bottom: 1rem;
-  background: #000;
-  border-radius: 8px;
+  margin-bottom: 1.25rem;
+  background: #0f172a;
+  border-radius: 12px;
   overflow: hidden;
 }
 .admin-crop-editor-actions {
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+.admin-crop-editor-actions .btn {
+  border-radius: 10px;
+  font-weight: 500;
 }
 
 /* Previsualización de imagen (lightbox) */
