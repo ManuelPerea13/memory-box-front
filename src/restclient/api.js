@@ -128,6 +128,28 @@ const api = {
     return this.put(`api/image-crops/${id}/`, data);
   },
 
+  /** Replace image for an existing crop (admin). Sends multipart with image file. orderId required so backend can resolve the crop. */
+  replaceImageCrop(cropId, orderId, file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    const headers = {};
+    const authToken = localStorage.getItem('authToken');
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    const url = `${BASE_URL}api/image-crops/${cropId}/?order_id=${encodeURIComponent(orderId)}`;
+    return fetch(url, {
+      method: 'PATCH',
+      headers,
+      credentials: 'include',
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || err.image || `Error ${res.status}`);
+      }
+      return res.json();
+    });
+  },
+
   deleteImageCrop(id) {
     return this.delete(`api/image-crops/${id}/`);
   },

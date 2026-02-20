@@ -1,7 +1,32 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import Cropper from 'react-easy-crop';
 import JSZip from 'jszip';
 import api from '../../restclient/api';
+
+const getCroppedBlob = (imageUrl, pixelCrop) =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = pixelCrop.width;
+        canvas.height = pixelCrop.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(
+          img,
+          pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
+          0, 0, pixelCrop.width, pixelCrop.height
+        );
+        canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))), 'image/jpeg', 0.9);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = imageUrl;
+  });
 
 const getExtension = (pathOrUrl) => {
   if (!pathOrUrl) return '.jpg';
@@ -110,6 +135,9 @@ const AdminDashboard = () => {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [downloadingZipId, setDownloadingZipId] = useState(null);
   const [zipError, setZipError] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [cropEditor, setCropEditor] = useState(null);
+  const adminCropPixelsRef = useRef(null);
   const previewOverlayRef = useRef(null);
 
   const loadOrders = useCallback((silent = false) => {
@@ -139,6 +167,17 @@ const AdminDashboard = () => {
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [openMenuId]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (cropEditor && !cropEditor.crop) setCropEditor(null);
+  }, [cropEditor]);
 
   useEffect(() => {
     if (previewGallery && previewOverlayRef.current) {
@@ -726,23 +765,35 @@ const AdminDashboard = () => {
                 return (
                 <div className="admin-detail-section">
                   <h3>Imágenes ({detailOrder.image_crops.length})</h3>
+                  <p className="admin-detail-images-hint">Clic derecho sobre una imagen para reemplazarla.</p>
                   <div className="admin-detail-images">
                     {detailOrder.image_crops.slice(0, 10).map((crop) => {
                       const url = crop.image ? getMediaUrl(crop.image) : null;
                       return (
-                        <button
+                        <div
                           key={crop.id}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           className="admin-detail-thumb"
                           onClick={() => url && setPreviewGallery({ urls: previewUrls, currentIndex: previewUrls.indexOf(url) })}
-                          disabled={!url}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setContextMenu({ x: e.clientX, y: e.clientY, crop });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              if (url) setPreviewGallery({ urls: previewUrls, currentIndex: previewUrls.indexOf(url) });
+                            }
+                          }}
                         >
                           {url ? (
                             <img src={url} alt="" />
                           ) : (
                             <span>—</span>
                           )}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -750,6 +801,135 @@ const AdminDashboard = () => {
                 );
               })()}
             </div>
+          </div>
+        </div>
+      )}
+
+      {contextMenu && (
+        <div
+          className="admin-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="admin-context-menu-item"
+            onClick={() => {
+              setCropEditor({
+                crop: contextMenu.crop,
+                step: 'select',
+                file: null,
+                objectUrl: null,
+                cropArea: { x: 0, y: 0 },
+                zoom: 1,
+              });
+              setContextMenu(null);
+            }}
+          >
+            Reemplazar imagen
+          </button>
+        </div>
+      )}
+
+      {cropEditor?.crop && (
+        <div className="admin-detail-overlay admin-crop-editor-overlay">
+          <div className="admin-crop-editor-modal">
+            <div className="admin-crop-editor-header">
+              <h3>Reemplazar imagen (slot {(cropEditor.crop.slot ?? 0) + 1})</h3>
+              <button
+                type="button"
+                className="admin-detail-close"
+                onClick={() => !cropEditor.saving && setCropEditor(null)}
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+            {cropEditor.step === 'select' && (
+              <div className="admin-crop-editor-select">
+                <p>Elegí una imagen nueva para este slot.</p>
+                <input
+                  id="admin-crop-editor-file"
+                  type="file"
+                  accept="image/*"
+                  className="admin-crop-editor-file-hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const objectUrl = URL.createObjectURL(file);
+                    setCropEditor((prev) => ({
+                      ...prev,
+                      step: 'crop',
+                      file,
+                      objectUrl,
+                    }));
+                  }}
+                />
+                <label htmlFor="admin-crop-editor-file" className="btn btn-primary">
+                  Seleccionar archivo
+                </label>
+              </div>
+            )}
+            {cropEditor.step === 'crop' && cropEditor.objectUrl && (
+              <div className="admin-crop-editor-crop">
+                <div className="admin-crop-editor-crop-wrap">
+                  <Cropper
+                    image={cropEditor.objectUrl}
+                    crop={cropEditor.cropArea}
+                    zoom={cropEditor.zoom}
+                    aspect={1}
+                    onCropChange={(area) => setCropEditor((prev) => ({ ...prev, cropArea: area }))}
+                    onZoomChange={(z) => setCropEditor((prev) => ({ ...prev, zoom: z }))}
+                    onCropComplete={(_, croppedAreaPixels) => {
+                      adminCropPixelsRef.current = croppedAreaPixels;
+                    }}
+                    cropShape="rect"
+                    showGrid
+                  />
+                </div>
+                <div className="admin-crop-editor-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      if (cropEditor.objectUrl) URL.revokeObjectURL(cropEditor.objectUrl);
+                      setCropEditor((prev) => ({ ...prev, step: 'select', file: null, objectUrl: null }));
+                    }}
+                  >
+                    Elegir otra
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={cropEditor.saving}
+                    onClick={async () => {
+                      const pixels = adminCropPixelsRef.current;
+                      if (!pixels || !cropEditor.objectUrl) return;
+                      setCropEditor((prev) => ({ ...prev, saving: true }));
+                      try {
+                        const blob = await getCroppedBlob(cropEditor.objectUrl, pixels);
+                        const file = new File([blob], `crop_${cropEditor.crop?.slot ?? 0}.jpg`, { type: 'image/jpeg' });
+                        const orderId = detailOrder?.id ?? cropEditor.crop?.order;
+                        if (!orderId) throw new Error('Falta el pedido');
+                        if (!cropEditor.crop?.id) throw new Error('Falta el crop');
+                        await api.replaceImageCrop(cropEditor.crop.id, orderId, file);
+                        if (cropEditor.objectUrl) URL.revokeObjectURL(cropEditor.objectUrl);
+                        setCropEditor(null);
+                        if (detailOrder?.id) {
+                          const updated = await api.getOrder(detailOrder.id);
+                          setDetailOrder(updated);
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setCropEditor((prev) => ({ ...prev, saving: false }));
+                      }
+                    }}
+                  >
+                    {cropEditor.saving ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

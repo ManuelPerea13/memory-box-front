@@ -82,6 +82,36 @@ const getCenteredSquareCrop = (width, height) => {
   return { x, y, w: size, h: size };
 };
 
+const THUMB_PREVIEW_SIZE = 200;
+
+const createCroppedPreviewDataUrl = (imageUrl, crop) =>
+  new Promise((resolve, reject) => {
+    if (!crop || crop.w <= 0 || crop.h <= 0) {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = THUMB_PREVIEW_SIZE;
+        canvas.height = THUMB_PREVIEW_SIZE;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(
+          img,
+          crop.x, crop.y, crop.w, crop.h,
+          0, 0, THUMB_PREVIEW_SIZE, THUMB_PREVIEW_SIZE
+        );
+        resolve(canvas.toDataURL('image/jpeg', 0.9));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => reject(new Error('Failed to load image for preview'));
+    img.src = imageUrl;
+  });
+
 const ImageEditor = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -102,7 +132,21 @@ const ImageEditor = () => {
   const [addingDefaultPhrases, setAddingDefaultPhrases] = useState(false);
   const [showPhraseModal, setShowPhraseModal] = useState(false);
   const [selectedPhraseIndexes, setSelectedPhraseIndexes] = useState([]);
+  const [thumbPreviews, setThumbPreviews] = useState({});
   const cropPixelsRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    images.forEach((img) => {
+      if (!img?.crop || img.crop.w <= 0 || img.crop.h <= 0) return;
+      createCroppedPreviewDataUrl(img.url, img.crop).then((dataUrl) => {
+        if (!cancelled && dataUrl) {
+          setThumbPreviews((prev) => ({ ...prev, [img.id]: dataUrl }));
+        }
+      }).catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, [images]);
 
   useEffect(() => {
     api.getPrices(false).then((data) => {
@@ -238,6 +282,7 @@ const ImageEditor = () => {
 
   const clearAll = () => {
     images.forEach((i) => URL.revokeObjectURL(i.url));
+    setThumbPreviews({});
     setImages([]);
     setSelectedIndex(-1);
     setFileInputKey((k) => k + 1);
@@ -314,8 +359,10 @@ const ImageEditor = () => {
   };
 
   const removeAt = (idx) => {
+    const removedId = images[idx]?.id;
     const next = images.filter((_, i) => i !== idx);
     URL.revokeObjectURL(images[idx].url);
+    if (removedId) setThumbPreviews((p) => { const n = { ...p }; delete n[removedId]; return n; });
     setImages(next);
     if (selectedIndex === idx) {
       setSelectedIndex(next.length ? Math.min(idx, next.length - 1) : -1);
@@ -516,7 +563,11 @@ const ImageEditor = () => {
             onClick={() => selectIndex(i)}
           >
             <span className="image-editor-thumb-badge">{i + 1}</span>
-            <img src={img.url} alt={`${i + 1}`} draggable={false} />
+            <img
+              src={img.crop && img.crop.w > 0 && thumbPreviews[img.id] ? thumbPreviews[img.id] : img.url}
+              alt={`${i + 1}`}
+              draggable={false}
+            />
             <button
               type="button"
               className="image-editor-thumb-delete"
