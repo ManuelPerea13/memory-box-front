@@ -6,6 +6,7 @@ Frontend React para el sistema de pedidos Cajita de la Memoria. Orden de carpeta
 
 ```
 memory-box-front/
+├── k8s/microk8s/        # deploy en mark1 (base + overlays dev/prod)
 ├── public/
 │   └── index.html
 ├── src/
@@ -50,6 +51,21 @@ npm start
 ```
 
 Configuración: crear `.env` con `REACT_APP_API_URL=http://localhost:8000/` si el backend está en otra URL.
+
+### Deploy en mark1 (MicroK8s)
+
+Todo lo necesario está en este repo: código + `k8s/microk8s/` (base + overlays dev/prod). En mark1:
+
+1. Clonar con deploy key en `~/workspaces/memory-box/repos/memory-box-front`.
+2. Build con la URL del API (IP de mark1 + NodePort del back, ej. 30082):
+   ```bash
+   docker build --build-arg REACT_APP_API_URL=http://192.168.88.50:30082/ -t localhost:32000/memory-box-front:prod .
+   docker push localhost:32000/memory-box-front:prod
+   microk8s kubectl apply -k k8s/microk8s/overlays/prod -n memory-box-prod
+   ```
+3. Actualizar: `git pull`, rebuild con el mismo `--build-arg`, push, `kubectl rollout restart deployment memory-box-front -n memory-box-prod`.
+
+Front en prod: NodePort **30083** (mismo namespace que el back: `memory-box-prod`).
 
 ## Rutas
 

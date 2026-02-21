@@ -1,11 +1,13 @@
-// En el navegador usar siempre el host actual (así desde el celular usa la IP, no localhost)
+// En prod se inyecta REACT_APP_API_URL en build; en dev usamos host actual
 const getBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     return `http://${window.location.hostname}:8000/`;
   }
   return process.env.REACT_APP_API_URL || 'http://localhost:8000/';
 };
-const BASE_URL = getBaseUrl();
+const BASE_URL = process.env.REACT_APP_API_URL
+  ? (process.env.REACT_APP_API_URL.replace(/\/$/, '') + '/')
+  : getBaseUrl();
 
 const getHeaders = (authenticated = true) => {
   const headers = { 'Content-Type': 'application/json' };
