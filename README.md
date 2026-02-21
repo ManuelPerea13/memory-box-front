@@ -67,6 +67,22 @@ Todo lo necesario está en este repo: código + `k8s/microk8s/` (base + overlays
 
 Front en prod: NodePort **30083** (mismo namespace que el back: `memory-box-prod`).
 
+### SSL con dominio (memory-box.shop)
+
+En mark1 está configurado **Ingress** con **cert-manager** y Let's Encrypt (igual que landing-page):
+
+- **Dominios:** `memory-box.shop`, `www.memory-box.shop`
+- **TLS:** cert-manager crea el certificado usando el ClusterIssuer `letsencrypt-prod` (debe existir en el cluster, p. ej. desde innovbi/landing-page).
+- **Rutas:** `/` → front, `/api` → back.
+
+El Ingress está en `k8s/microk8s/base/ingress.yaml`. Se aplica con el mismo `kubectl apply -k ... -n memory-box-prod`.
+
+Para que el front llame al API por el mismo dominio, recompilar con **misma-origen**:
+```bash
+docker build --build-arg REACT_APP_API_URL=/api/ -t localhost:32000/memory-box-front:prod .
+```
+Así las peticiones van a `https://memory-box.shop/api/`. En el back, asegurar `ALLOWED_HOSTS` y `CORS_ALLOWED_ORIGINS` con `https://memory-box.shop` y `https://www.memory-box.shop`.
+
 ## Rutas
 
 - `/` – Inicio
