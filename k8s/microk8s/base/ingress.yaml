@@ -19,6 +19,20 @@ spec:
     - host: memory-box.shop
       http:
         paths:
+          - path: /django-admin
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
           - path: /api
             pathType: Prefix
             backend:
@@ -36,6 +50,20 @@ spec:
     - host: www.memory-box.shop
       http:
         paths:
+          - path: /django-admin
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
           - path: /api
             pathType: Prefix
             backend:
