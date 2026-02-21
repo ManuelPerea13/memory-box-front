@@ -8,6 +8,8 @@ metadata:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 spec:
   ingressClassName: public
   tls:
@@ -41,6 +43,13 @@ spec:
                 port:
                   number: 80
           - path: /media
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /ws
             pathType: Prefix
             backend:
               service:
@@ -86,6 +95,13 @@ spec:
                 port:
                   number: 80
           - path: /media
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /ws
             pathType: Prefix
             backend:
               service:
