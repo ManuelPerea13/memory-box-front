@@ -461,6 +461,68 @@ a:hover {
   font-size: 0.9rem;
 }
 
+.home-transfer-block {
+  margin-top: 2rem;
+  padding: 1.75rem;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 0.95rem;
+}
+
+.home-transfer-block .home-transfer-title {
+  margin: 0 0 1rem 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.home-transfer-data {
+  padding-bottom: 1.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.home-transfer-data p {
+  margin: 0 0 0.35rem;
+  color: #475569;
+}
+
+.home-transfer-block .home-transfer-send {
+  margin: 0 0 0.6rem 0 !important;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.home-transfer-actions {
+  margin-bottom: 1rem;
+}
+
+.home-transfer-block .home-transfer-btn,
+.home-transfer-block .home-copy-alias {
+  display: inline-block;
+  width: auto;
+  margin: 0.35rem;
+  min-width: 10rem;
+}
+
+.home-transfer-block .home-copy-alias {
+  margin-top: 0.25rem;
+}
+
+.home-transfer-block p {
+  margin: 0 0 0.25rem;
+  color: #555;
+}
+
 .home-transfer-title {
   margin: 0 0 0.5rem;
   font-weight: 600;
@@ -1096,8 +1158,14 @@ a:hover {
   gap: 0.75rem;
 }
 
+/* Input oculto visualmente pero en el DOM: funciona en iOS, Android y desktop (display:none falla en iOS) */
 .image-editor-file-input {
-  display: none;
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
 }
 
 .image-editor-file-label {

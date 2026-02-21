@@ -8,6 +8,7 @@ const DEFAULT_ALIAS = 'manu.perea13';
 const DEFAULT_TELEFONO = '+54 9 351 392 3790';
 const DEFAULT_EMAIL = 'copiiworld@gmail.com';
 const DEFAULT_DEPOSIT = '$ 12.000';
+const WHATSAPP_COMPROBANTE_MSG = 'Hola, te envío el comprobante de la transferencia de la Cajita de la Memoria.';
 
 const VARIANT_LABELS = {
   graphite: 'Grafito',
@@ -249,8 +250,16 @@ const ImageEditor = () => {
     }
   }, [selectedIndex, images.length]);
 
+  /* Acepta por tipo MIME o por extensión (iOS a veces no envía type en fotos de galería). Igual criterio en desktop, Android e iOS. */
+  const isImageFile = (f) => {
+    if (!f) return false;
+    if (f.type?.startsWith('image/')) return true;
+    if (!f.type && f.name) return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(f.name);
+    return false;
+  };
+
   const addFiles = (fileList) => {
-    const files = Array.from(fileList || []).filter((f) => f.type?.startsWith('image/'));
+    const files = Array.from(fileList || []).filter(isImageFile);
     if (files.length === 0) return;
     const remaining = REQUIRED_COUNT - images.length;
     const toAdd = files.slice(0, remaining).map((file) => ({
@@ -512,7 +521,7 @@ const ImageEditor = () => {
                 key={fileInputKey}
                 type="file"
                 id="image-editor-file"
-                accept="image/*"
+                accept="image/*,image/heic,image/heif"
                 multiple
                 onChange={handleFileChange}
                 className="image-editor-file-input"
@@ -637,10 +646,6 @@ const ImageEditor = () => {
             </div>
             <p className="image-editor-drop-note">
               <strong>Formato:</strong> Imágenes JPG, PNG o similares. Máximo 10 imágenes.
-            </p>
-            <p className="image-editor-canva-note">
-              Si querés una imagen personalizada con tu propia frase, te recomendamos diseñarla en{' '}
-              <a href="https://www.canva.com/" target="_blank" rel="noopener noreferrer">Canva</a>.
             </p>
           </div>
         ) : null}
@@ -767,7 +772,7 @@ const ImageEditor = () => {
               <p className="order-confirmed-send-hint">Envía tu comprobante de pago por WhatsApp o correo electrónico para confirmar tu pedido.</p>
               <div className="order-confirmed-send-buttons">
                 <a
-                  href={`https://wa.me/${(pricesSettings?.contact_whatsapp ?? DEFAULT_TELEFONO).replace(/\D/g, '')}?text=${encodeURIComponent('Hola, adjunto el comprobante de pago de mi pedido.')}`}
+                  href={`https://wa.me/${(pricesSettings?.contact_whatsapp ?? DEFAULT_TELEFONO).replace(/\D/g, '')}?text=${encodeURIComponent(WHATSAPP_COMPROBANTE_MSG)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="order-confirmed-send-btn order-confirmed-whatsapp"
