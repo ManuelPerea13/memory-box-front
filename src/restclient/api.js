@@ -5,9 +5,12 @@ const getBaseUrl = () => {
   }
   return process.env.REACT_APP_API_URL || 'http://localhost:8000/';
 };
-const BASE_URL = process.env.REACT_APP_API_URL
-  ? (process.env.REACT_APP_API_URL.replace(/\/$/, '') + '/')
-  : getBaseUrl();
+// Si REACT_APP_API_URL es solo "/" usamos origen actual (mismo host); las rutas ya llevan "api/"
+const BASE_URL = process.env.REACT_APP_API_URL === '/' || process.env.REACT_APP_API_URL === ''
+  ? '/'
+  : process.env.REACT_APP_API_URL
+    ? (process.env.REACT_APP_API_URL.replace(/\/$/, '') + '/')
+    : getBaseUrl();
 
 const getHeaders = (authenticated = true) => {
   const headers = { 'Content-Type': 'application/json' };
