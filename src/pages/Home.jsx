@@ -1,20 +1,42 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import api from '../restclient/api';
 
-const ALIAS = 'manu.perea13';
-const TELEFONO = '+54 9 351 392 3790';
-const EMAIL = 'copiiworld@gmail.com';
+const DEFAULT_ALIAS = 'manu.perea13';
+const DEFAULT_TELEFONO = '+54 9 351 392 3790';
+const DEFAULT_EMAIL = 'copiiworld@gmail.com';
+const DEFAULT_PRICES = {
+  price_mercadolibre: 35000,
+  price_sin_luz: 24000,
+  price_con_luz: 42000,
+  price_pilas: 2500,
+  transfer_alias: DEFAULT_ALIAS,
+  transfer_bank: 'Mercado Pago',
+  transfer_holder: 'Manuel Perea',
+  contact_whatsapp: DEFAULT_TELEFONO,
+  contact_email: DEFAULT_EMAIL,
+  link_mercadolibre: 'https://mercadolibre.com',
+};
 
 const VIDEO_SIN_LUZ = '/static/videos/video-navidad.mp4';
 const VIDEO_CON_LUZ = '/static/videos/background-video-2.mp4';
 const AUDIO_SIN_LUZ = '/static/audio/cancion-navidad.mp3';
 const AUDIO_CON_LUZ = '/static/audio/background-music-2.mp3';
 
+const formatPrice = (n) => (n == null || n === '' ? '' : `$${Number(n).toLocaleString('es-AR')}`);
+
 const Home = () => {
   const [sinLuz, setSinLuz] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [prices, setPrices] = useState(DEFAULT_PRICES);
   const videoRef = useRef(null);
   const audioRef = useRef(null);
+
+  useEffect(() => {
+    api.getPrices(false).then((data) => {
+      if (data && typeof data === 'object') setPrices((prev) => ({ ...DEFAULT_PRICES, ...prev, ...data }));
+    }).catch(() => {});
+  }, []);
 
   const toggleAudio = () => {
     if (!audioRef.current) return;
@@ -61,8 +83,11 @@ const Home = () => {
   }, []);
 
   const copiarAlias = () => {
-    navigator.clipboard?.writeText(ALIAS);
+    navigator.clipboard?.writeText(prices.transfer_alias || DEFAULT_ALIAS);
   };
+  const alias = prices.transfer_alias || DEFAULT_ALIAS;
+  const telefono = prices.contact_whatsapp || DEFAULT_TELEFONO;
+  const email = prices.contact_email || DEFAULT_EMAIL;
 
   return (
     <div className="home-landing">
@@ -158,25 +183,25 @@ const Home = () => {
           <div className="home-pricing-card">
             <div className="home-pricing-icon" aria-hidden>💳</div>
             <h3>Mercado Libre</h3>
-            <p className="home-pricing-price">$35.000</p>
+            <p className="home-pricing-price">{formatPrice(prices.price_mercadolibre)}</p>
             <p className="home-pricing-desc">Pago seguro con tarjeta de crédito, débito o efectivo a través de Mercado Libre.</p>
-            <a href="https://mercadolibre.com" target="_blank" rel="noopener noreferrer" className="btn btn-primary home-pricing-cta">Comprar en Mercado Libre</a>
+            <a href={prices.link_mercadolibre || 'https://mercadolibre.com'} target="_blank" rel="noopener noreferrer" className="btn btn-primary home-pricing-cta">Comprar en Mercado Libre</a>
           </div>
 
           <div className="home-pricing-card home-pricing-card-featured">
             <div className="home-pricing-icon" aria-hidden>💰</div>
             <h3>Cajita Sin Luz</h3>
-            <p className="home-pricing-price">$24.000</p>
+            <p className="home-pricing-price">{formatPrice(prices.price_sin_luz)}</p>
             <span className="home-badge home-badge-green">Precio Directo</span>
             <p className="home-pricing-desc">Cajita tradicional sin iluminación. Pago directo por transferencia bancaria o en efectivo. Sin comisiones adicionales.</p>
             <div className="home-transfer">
               <p className="home-transfer-title">Datos para Transferencia:</p>
-              <p><strong>Alias:</strong> {ALIAS}</p>
-              <p><strong>Banco:</strong> Mercado Pago</p>
-              <p><strong>Titular:</strong> Manuel Perea</p>
+              <p><strong>Alias:</strong> {alias}</p>
+              <p><strong>Banco:</strong> {prices.transfer_bank || 'Mercado Pago'}</p>
+              <p><strong>Titular:</strong> {prices.transfer_holder || 'Manuel Perea'}</p>
               <p className="home-transfer-send">Enviar Comprobante:</p>
-              <a href={`tel:${TELEFONO.replace(/\s/g, '')}`} className="btn btn-green home-transfer-btn">{TELEFONO}</a>
-              <a href={`mailto:${EMAIL}`} className="btn btn-primary home-transfer-btn">{EMAIL}</a>
+              <a href={`tel:${telefono.replace(/\s/g, '')}`} className="btn btn-green home-transfer-btn">{telefono}</a>
+              <a href={`mailto:${email}`} className="btn btn-primary home-transfer-btn">{email}</a>
               <button type="button" onClick={copiarAlias} className="btn btn-secondary home-copy-alias">Copiar Alias</button>
             </div>
           </div>
@@ -184,17 +209,17 @@ const Home = () => {
           <div className="home-pricing-card">
             <div className="home-pricing-icon home-pricing-icon-bulb" aria-hidden>💡</div>
             <h3>Cajita Con Luz</h3>
-            <p className="home-pricing-price">$42.000</p>
+            <p className="home-pricing-price">{formatPrice(prices.price_con_luz)}</p>
             <span className="home-badge home-badge-green">Nueva</span>
-            <p className="home-pricing-desc">Cajita con iluminación LED. Incluye opción de pilas por $2.500 adicionales.</p>
+            <p className="home-pricing-desc">Cajita con iluminación LED. Incluye opción de pilas por {formatPrice(prices.price_pilas)} adicionales.</p>
             <div className="home-transfer">
               <p className="home-transfer-title">Datos para Transferencia:</p>
-              <p><strong>Alias:</strong> {ALIAS}</p>
-              <p><strong>Banco:</strong> Mercado Pago</p>
-              <p><strong>Titular:</strong> Manuel Perea</p>
+              <p><strong>Alias:</strong> {alias}</p>
+              <p><strong>Banco:</strong> {prices.transfer_bank || 'Mercado Pago'}</p>
+              <p><strong>Titular:</strong> {prices.transfer_holder || 'Manuel Perea'}</p>
               <p className="home-transfer-send">Enviar Comprobante:</p>
-              <a href={`tel:${TELEFONO.replace(/\s/g, '')}`} className="btn btn-green home-transfer-btn">{TELEFONO}</a>
-              <a href={`mailto:${EMAIL}`} className="btn btn-primary home-transfer-btn">{EMAIL}</a>
+              <a href={`tel:${telefono.replace(/\s/g, '')}`} className="btn btn-green home-transfer-btn">{telefono}</a>
+              <a href={`mailto:${email}`} className="btn btn-primary home-transfer-btn">{email}</a>
               <button type="button" onClick={copiarAlias} className="btn btn-secondary home-copy-alias">Copiar Alias</button>
             </div>
           </div>

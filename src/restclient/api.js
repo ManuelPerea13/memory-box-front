@@ -1,11 +1,11 @@
-// Usar host actual del navegador en dev para que funcione por IP (ej. 192.168.88.100)
-const getDefaultApiUrl = () => {
+// En el navegador usar siempre el host actual (así desde el celular usa la IP, no localhost)
+const getBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     return `http://${window.location.hostname}:8000/`;
   }
-  return 'http://localhost:8000/';
+  return process.env.REACT_APP_API_URL || 'http://localhost:8000/';
 };
-const BASE_URL = process.env.REACT_APP_API_URL || getDefaultApiUrl();
+const BASE_URL = getBaseUrl();
 
 const getHeaders = (authenticated = true) => {
   const headers = { 'Content-Type': 'application/json' };
@@ -59,8 +59,8 @@ const api = {
     return request(url, 'POST', data, authenticated);
   },
 
-  put(url, data) {
-    return request(url, 'PUT', data);
+  put(url, data, authenticated = true) {
+    return request(url, 'PUT', data, authenticated);
   },
 
   patch(url, data) {
@@ -76,8 +76,9 @@ const api = {
   },
 
   // Orders (backend: /api/orders/)
-  getOrders() {
-    return this.get('api/orders/');
+  getOrders(includeHidden = false) {
+    const qs = includeHidden ? '?include_hidden=1' : '';
+    return this.get(`api/orders/${qs}`);
   },
 
   getOrder(id) {
@@ -89,11 +90,29 @@ const api = {
   },
 
   updateOrder(id, data) {
-    return this.put(`api/orders/${id}/`, data);
+    return this.put(`api/orders/${id}/`, data, false);
+  },
+
+  patchOrder(id, data) {
+    return this.patch(`api/orders/${id}/`, data);
   },
 
   sendOrder(id) {
-    return this.post(`api/orders/${id}/send_order/`, {});
+    return this.post(`api/orders/${id}/send_order/`, {}, false);
+  },
+
+  submitOrderImages(orderId, formData) {
+    return fetch(`${BASE_URL}api/orders/${orderId}/submit_images/`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Request failed: ${res.status}`);
+      }
+      return res.json();
+    });
   },
 
   // Image crops (backend: /api/image-crops/)
@@ -109,8 +128,52 @@ const api = {
     return this.put(`api/image-crops/${id}/`, data);
   },
 
+  /** Replace image for an existing crop (admin). Sends multipart with image file. orderId required so backend can resolve the crop. */
+  replaceImageCrop(cropId, orderId, file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    const headers = {};
+    const authToken = localStorage.getItem('authToken');
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    const url = `${BASE_URL}api/image-crops/${cropId}/?order_id=${encodeURIComponent(orderId)}`;
+    return fetch(url, {
+      method: 'PATCH',
+      headers,
+      credentials: 'include',
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || err.image || `Error ${res.status}`);
+      }
+      return res.json();
+    });
+  },
+
   deleteImageCrop(id) {
     return this.delete(`api/image-crops/${id}/`);
+  },
+
+  // Stock (admin)
+  getStock() {
+    return this.get('api/stock/');
+  },
+
+  addStock(variant, boxType, amount) {
+    return this.post('api/stock/add_stock/', { variant, box_type: boxType, amount });
+  },
+
+  setStock(variant, boxType, quantity) {
+    return this.post('api/stock/set_stock/', { variant, box_type: boxType, quantity });
+  },
+
+  // Precios y datos de transferencia (público GET; PATCH con auth)
+  getPrices(authenticated = false) {
+    return this.get('api/settings/prices/', authenticated);
+  },
+
+  updatePrices(data) {
+    return this.patch('api/settings/prices/', data);
   },
 };
 
