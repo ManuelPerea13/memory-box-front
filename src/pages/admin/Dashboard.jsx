@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Cropper from 'react-easy-crop';
-import JSZip from 'jszip';
 import api from '../../restclient/api';
 
 // Mismo tamaño que el backend (orders/views.py submit_images: 685x685)
@@ -30,12 +29,6 @@ const getCroppedBlob = (imageUrl, pixelCrop) =>
     img.onerror = () => reject(new Error('Failed to load image'));
     img.src = imageUrl;
   });
-
-const getExtension = (pathOrUrl) => {
-  if (!pathOrUrl) return '.jpg';
-  const match = pathOrUrl.match(/\.(jpe?g|png|gif|webp)(\?|$)/i);
-  return match ? '.' + match[1].toLowerCase() : '.jpg';
-};
 
 const sanitizeFileName = (name) => {
   if (!name || typeof name !== 'string') return 'cliente';
@@ -308,91 +301,15 @@ const AdminDashboard = () => {
     setZipError(null);
     setDownloadingZipId(order.id);
     try {
-      const orderDetail = await api.getOrder(order.id);
-      const crops = (orderDetail.image_crops || []).slice(0, 10);
-      const qrPath = orderDetail.qr_code;
-      const ext = crops.length > 0 && crops[0].image
-        ? getExtension(crops[0].image)
-        : '.jpg';
-
-      const zip = new JSZip();
-      const opts = { credentials: 'include' };
-
-      for (let i = 0; i < crops.length; i++) {
-        const path = crops[i].image;
-        if (!path) continue;
-        const url = getMediaUrlSameOrigin(path);
-        if (!url) continue;
-        const res = await fetch(url, opts);
-        if (!res.ok) continue;
-        const blob = await res.blob();
-        zip.file(`${i + 1}${ext}`, blob);
-      }
-
-      if (qrPath) {
-        const qrUrl = getMediaUrlSameOrigin(qrPath);
-        let qrBlob = null;
-        if (crops.length > 0 && crops[0].image) {
-          try {
-            const firstUrl = getMediaUrlSameOrigin(crops[0].image);
-            const size = await new Promise((resolve, reject) => {
-              const img = new Image();
-              img.crossOrigin = 'anonymous';
-              img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-              img.onerror = reject;
-              img.src = firstUrl;
-            });
-            qrBlob = await new Promise((resolve, reject) => {
-              const qrImg = new Image();
-              qrImg.crossOrigin = 'anonymous';
-              qrImg.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = size.w;
-                canvas.height = size.h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(qrImg, 0, 0, size.w, size.h);
-                canvas.toBlob(
-                  (b) => (b ? resolve(b) : reject(new Error('canvas toBlob failed'))),
-                  'image/jpeg',
-                  0.92
-                );
-              };
-              qrImg.onerror = reject;
-              qrImg.src = qrUrl;
-            });
-          } catch {
-            const res = await fetch(qrUrl, opts);
-            if (res.ok) qrBlob = await res.blob();
-          }
-        } else {
-          const res = await fetch(qrUrl, opts);
-          if (res.ok) qrBlob = await res.blob();
-        }
-        if (qrBlob) zip.file(`11${ext}`, qrBlob);
-      }
-
-      const date = orderDetail.created_at ? new Date(orderDetail.created_at) : new Date();
-      const yyyymmdd =
-        date.getFullYear() +
-        String(date.getMonth() + 1).padStart(2, '0') +
-        String(date.getDate()).padStart(2, '0');
-      const name = sanitizeFileName(orderDetail.client_name);
-      const filename = `${yyyymmdd}-${name}.zip`;
-
-      const count = Object.keys(zip.files).length;
-      if (count === 0) {
-        setZipError('No se pudo obtener ninguna imagen. ¿El pedido tiene imágenes subidas?');
-        return;
-      }
-      const content = await zip.generateAsync({ type: 'blob' });
+      const { blob, filename } = await api.getOrderZip(order.id);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(content);
+      a.href = URL.createObjectURL(blob);
       a.download = filename;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (err) {
-      console.error('Error al generar zip:', err);
-      setZipError(err?.message || 'Error al generar el zip. Revisa la consola.');
+      console.error('Error al descargar zip:', err);
+      setZipError(err?.message || 'Error al descargar el zip. Revisa la consola.');
     } finally {
       setDownloadingZipId(null);
     }

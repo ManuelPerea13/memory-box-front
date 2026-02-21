@@ -106,6 +106,29 @@ const api = {
     return this.post(`api/orders/${id}/send_order/`, {}, false);
   },
 
+  /**
+   * Download order images as ZIP (backend builds it; avoids fetch to /media/).
+   * Returns { blob, filename }. Requires auth.
+   */
+  getOrderZip(orderId) {
+    const url = `${BASE_URL}api/orders/${orderId}/download_zip/`;
+    return fetch(url, {
+      method: 'GET',
+      headers: getHeaders(true),
+      credentials: 'include',
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Error ${res.status}`);
+      }
+      const blob = await res.blob();
+      const disp = res.headers.get('Content-Disposition');
+      const match = disp && /filename="?([^"]+)"?/.exec(disp);
+      const filename = match ? match[1].trim() : `order-${orderId}.zip`;
+      return { blob, filename };
+    });
+  },
+
   submitOrderImages(orderId, formData) {
     return fetch(`${BASE_URL}api/orders/${orderId}/submit_images/`, {
       method: 'POST',
