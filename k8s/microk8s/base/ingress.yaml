@@ -26,11 +26,18 @@ spec:
                 name: memory-box-back
                 port:
                   number: 80
-          - path: /static
+          - path: /static/admin
             pathType: Prefix
             backend:
               service:
                 name: memory-box-back
+                port:
+                  number: 80
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-front
                 port:
                   number: 80
           - path: /media
@@ -64,11 +71,18 @@ spec:
                 name: memory-box-back
                 port:
                   number: 80
-          - path: /static
+          - path: /static/admin
             pathType: Prefix
             backend:
               service:
                 name: memory-box-back
+                port:
+                  number: 80
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-front
                 port:
                   number: 80
           - path: /media
