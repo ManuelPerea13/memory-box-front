@@ -77,11 +77,11 @@ En mark1 está configurado **Ingress** con **cert-manager** y Let's Encrypt (igu
 
 El Ingress está en `k8s/microk8s/base/ingress.yaml`. Se aplica con el mismo `kubectl apply -k ... -n memory-box-prod`.
 
-Para que el front llame al API por el mismo dominio, recompilar con **misma-origen**:
+Para que el front llame al API por el mismo dominio, recompilar con **origen raíz** (las rutas del front ya llevan `api/`):
 ```bash
-docker build --build-arg REACT_APP_API_URL=/api/ -t localhost:32000/memory-box-front:prod .
+docker build --build-arg REACT_APP_API_URL=/ -t localhost:32000/memory-box-front:prod .
 ```
-Así las peticiones van a `https://memory-box.shop/api/`. En el back, asegurar `ALLOWED_HOSTS` y `CORS_ALLOWED_ORIGINS` con `https://memory-box.shop` y `https://www.memory-box.shop`.
+Así las peticiones van a `https://memory-box.shop/api/orders/` etc. En el back, asegurar `CORS_ALLOWED_ORIGINS` con `https://memory-box.shop` y `https://www.memory-box.shop`.
 
 ## Rutas
 
