@@ -203,6 +203,167 @@ const api = {
   updatePrices(data) {
     return this.patch('api/settings/prices/', data);
   },
+
+  // Costos de referencia (admin; JSON en config)
+  getCosts() {
+    return this.get('api/settings/costs/');
+  },
+
+  updateCosts(data) {
+    return this.patch('api/settings/costs/', data);
+  },
+
+  // Stock de packaging (cajas/bolsas). Se descuenta al finalizar pedidos.
+  getPackaging() {
+    return this.get('api/packaging/');
+  },
+
+  // Compras/gastos (registro variable)
+  getPurchases() {
+    return this.get('api/purchases/');
+  },
+
+  createPurchase(data) {
+    return this.post('api/purchases/', data);
+  },
+
+  updatePurchase(id, data) {
+    return this.patch(`api/purchases/${id}/`, data);
+  },
+
+  deletePurchase(id) {
+    return this.delete(`api/purchases/${id}/`);
+  },
+
+  // Estadísticas (ventas por día/mes, resumen ventas vs costos)
+  getEstadisticas(days = 30, months = 12) {
+    const qs = `?days=${encodeURIComponent(days)}&months=${encodeURIComponent(months)}`;
+    return this.get(`api/estadisticas/${qs}`);
+  },
+
+  // Video y música de fondo de la página principal (público GET; PATCH con auth)
+  getHomeBackground(authenticated = false) {
+    return this.get('api/settings/home-background/', authenticated);
+  },
+
+  updateHomeBackground(data) {
+    return this.patch('api/settings/home-background/', data);
+  },
+
+  // Lista de videos/audios de fondo (admin)
+  getBackgroundMedia(type = null) {
+    const qs = type ? `?type=${encodeURIComponent(type)}` : '';
+    return this.get(`api/settings/background-media/${qs}`);
+  },
+
+  createBackgroundMedia(formDataOrData) {
+    if (formDataOrData instanceof FormData) {
+      const headers = {};
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      return fetch(`${this.baseUrl}api/settings/background-media/`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: formDataOrData,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw Object.assign(new Error(err.detail || err.file || 'Error al crear'), { data: err });
+        }
+        return res.json();
+      });
+    }
+    return this.post('api/settings/background-media/', formDataOrData);
+  },
+
+  updateBackgroundMedia(id, formDataOrData) {
+    if (formDataOrData instanceof FormData) {
+      const headers = {};
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      return fetch(`${this.baseUrl}api/settings/background-media/${id}/`, {
+        method: 'PATCH',
+        headers,
+        credentials: 'include',
+        body: formDataOrData,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw Object.assign(new Error(err.detail || err.name || 'Error al actualizar'), { data: err });
+        }
+        return res.json();
+      });
+    }
+    return this.patch(`api/settings/background-media/${id}/`, formDataOrData);
+  },
+
+  // Variantes de caja (público para ClientData; resto con auth)
+  getVariantsPublic() {
+    return this.get('api/settings/variants/public/', false);
+  },
+
+  getVariants() {
+    return this.get('api/settings/variants/');
+  },
+
+  createVariant(data) {
+    return this.post('api/settings/variants/', data);
+  },
+
+  updateVariant(id, data) {
+    return this.patch(`api/settings/variants/${id}/`, data);
+  },
+
+  createVariantImage(formDataOrData) {
+    if (formDataOrData instanceof FormData) {
+      const headers = {};
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      return fetch(`${this.baseUrl}api/settings/variant-images/`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: formDataOrData,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw Object.assign(new Error(err.detail || err.file || 'Error al crear'), { data: err });
+        }
+        return res.json();
+      });
+    }
+    return this.post('api/settings/variant-images/', formDataOrData);
+  },
+
+  getVariantImages(variantId) {
+    return this.get(`api/settings/variant-images/?variant_id=${encodeURIComponent(variantId)}`);
+  },
+
+  updateVariantImage(id, formDataOrData) {
+    if (formDataOrData instanceof FormData) {
+      const headers = {};
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      return fetch(`${this.baseUrl}api/settings/variant-images/${id}/`, {
+        method: 'PATCH',
+        headers,
+        credentials: 'include',
+        body: formDataOrData,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw Object.assign(new Error(err.detail || 'Error al actualizar'), { data: err });
+        }
+        return res.json();
+      });
+    }
+    return this.patch(`api/settings/variant-images/${id}/`, formDataOrData);
+  },
+
+  deleteVariantImage(id) {
+    return this.delete(`api/settings/variant-images/${id}/`);
+  },
 };
 
 export default api;
