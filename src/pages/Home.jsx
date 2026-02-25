@@ -20,6 +20,7 @@ const DEFAULT_PRICES = {
 
 const formatPrice = (n) => (n == null || n === '' ? '' : `$${Number(n).toLocaleString('es-AR')}`);
 
+const WHATSAPP_COMPROBANTE_MSG = 'Hola, te envío el comprobante de la transferencia de la Cajita de la Memoria.';
 /** URLs que empiezan con /media/ se sirven desde el backend; el resto desde el mismo origen (front). */
 const getMediaSrc = (url) => {
   if (!url || typeof url !== 'string') return url;
@@ -221,42 +222,36 @@ const Home = () => {
             <p className="home-pricing-price">{formatPrice(prices.price_sin_luz)}</p>
             <span className="home-badge home-badge-green">Precio Directo</span>
             <p className="home-pricing-desc">Cajita tradicional sin iluminación. Pago directo por transferencia bancaria o en efectivo. Sin comisiones adicionales.</p>
-            <div className="home-transfer">
-              <p className="home-transfer-title">Datos para Transferencia:</p>
-              <p><strong>Alias:</strong> {alias}</p>
-              <p><strong>Banco:</strong> {prices.transfer_bank || 'Mercado Pago'}</p>
-              <p><strong>Titular:</strong> {prices.transfer_holder || 'Manuel Perea'}</p>
-              <p className="home-transfer-send">Enviar Comprobante:</p>
-              <a href={`tel:${telefono.replace(/\s/g, '')}`} className="btn btn-green home-transfer-btn">{telefono}</a>
-              <a href={`mailto:${email}`} className="btn btn-primary home-transfer-btn">{email}</a>
-              <button type="button" onClick={copiarAlias} className="btn btn-secondary home-copy-alias">Copiar Alias</button>
-            </div>
           </div>
 
           <div className="home-pricing-card">
             <div className="home-pricing-icon home-pricing-icon-bulb" aria-hidden>💡</div>
             <h3>Cajita Con Luz</h3>
-            <p className="home-pricing-price">{formatPrice(prices.price_con_luz)}</p>
+            <p className="home-pricing-price">{formatPrice((Number(prices.price_con_luz) || 0) + (Number(prices.price_pilas) || 0))}</p>
             <span className="home-badge home-badge-green">Nueva</span>
-            <p className="home-pricing-desc">Cajita con iluminación LED. Incluye opción de pilas por {formatPrice(prices.price_pilas)} adicionales.</p>
-            <div className="home-transfer">
-              <p className="home-transfer-title">Datos para Transferencia:</p>
-              <p><strong>Alias:</strong> {alias}</p>
-              <p><strong>Banco:</strong> {prices.transfer_bank || 'Mercado Pago'}</p>
-              <p><strong>Titular:</strong> {prices.transfer_holder || 'Manuel Perea'}</p>
-              <p className="home-transfer-send">Enviar Comprobante:</p>
-              <a href={`tel:${telefono.replace(/\s/g, '')}`} className="btn btn-green home-transfer-btn">{telefono}</a>
-              <a href={`mailto:${email}`} className="btn btn-primary home-transfer-btn">{email}</a>
-              <button type="button" onClick={copiarAlias} className="btn btn-secondary home-copy-alias">Copiar Alias</button>
-            </div>
+            <p className="home-pricing-desc">Cajita con iluminación LED e incluye pilas. Pago directo por transferencia o en efectivo.</p>
           </div>
+        </div>
+
+        <div className="home-transfer-block">
+          <h3 className="home-transfer-title">Datos para Transferencia</h3>
+          <div className="home-transfer-data">
+            <p><strong>Alias:</strong> {alias}</p>
+            <p><strong>Banco:</strong> {prices.transfer_bank || 'Mercado Pago'}</p>
+            <p><strong>Titular:</strong> {prices.transfer_holder || 'Manuel Perea'}</p>
+          </div>
+          <p className="home-transfer-send">Enviar Comprobante</p>
+          <div className="home-transfer-actions">
+            <a href={`https://wa.me/${telefono.replace(/\D/g, '')}?text=${encodeURIComponent(WHATSAPP_COMPROBANTE_MSG)}`} target="_blank" rel="noopener noreferrer" className="btn btn-green home-transfer-btn">Enviar por WhatsApp</a>
+            <a href={`mailto:${email}`} className="btn btn-primary home-transfer-btn">{email}</a>
+          </div>
+          <button type="button" onClick={copiarAlias} className="btn btn-secondary home-copy-alias">Copiar Alias</button>
         </div>
       </section>
 
       {/* Footer */}
       <footer className="home-footer">
-        <p>© 2025 Cajita de la Memoria - Cajas de fotos personalizadas</p>
-        <a href="https://www.youtube.com/results?search_query=android+kiosk+mode" target="_blank" rel="noopener noreferrer">Android Kiosk Mode - YouTube</a>
+        <p>© {new Date().getFullYear()} Cajita de la Memoria - Cajas de fotos personalizadas</p>
       </footer>
     </div>
   );

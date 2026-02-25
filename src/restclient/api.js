@@ -1,11 +1,16 @@
-// En el navegador usar siempre el host actual (así desde el celular usa la IP, no localhost)
+// En prod se inyecta REACT_APP_API_URL en build; en dev usamos host actual
 const getBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     return `http://${window.location.hostname}:8000/`;
   }
   return process.env.REACT_APP_API_URL || 'http://localhost:8000/';
 };
-const BASE_URL = getBaseUrl();
+// Si REACT_APP_API_URL es solo "/" usamos origen actual (mismo host); las rutas ya llevan "api/"
+const BASE_URL = process.env.REACT_APP_API_URL === '/' || process.env.REACT_APP_API_URL === ''
+  ? '/'
+  : process.env.REACT_APP_API_URL
+    ? (process.env.REACT_APP_API_URL.replace(/\/$/, '') + '/')
+    : getBaseUrl();
 
 const getHeaders = (authenticated = true) => {
   const headers = { 'Content-Type': 'application/json' };
@@ -99,6 +104,29 @@ const api = {
 
   sendOrder(id) {
     return this.post(`api/orders/${id}/send_order/`, {}, false);
+  },
+
+  /**
+   * Download order images as ZIP (backend builds it; avoids fetch to /media/).
+   * Returns { blob, filename }. Requires auth.
+   */
+  getOrderZip(orderId) {
+    const url = `${BASE_URL}api/orders/${orderId}/download_zip/`;
+    return fetch(url, {
+      method: 'GET',
+      headers: getHeaders(true),
+      credentials: 'include',
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Error ${res.status}`);
+      }
+      const blob = await res.blob();
+      const disp = res.headers.get('Content-Disposition');
+      const match = disp && /filename="?([^"]+)"?/.exec(disp);
+      const filename = match ? match[1].trim() : `order-${orderId}.zip`;
+      return { blob, filename };
+    });
   },
 
   submitOrderImages(orderId, formData) {
