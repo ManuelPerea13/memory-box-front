@@ -18,23 +18,47 @@ const DEFAULT_PRICES = {
   link_mercadolibre: 'https://mercadolibre.com',
 };
 
-const VIDEO_SIN_LUZ = '/static/videos/video-navidad.mp4';
-const VIDEO_CON_LUZ = '/static/videos/background-video-2.mp4';
-const AUDIO_SIN_LUZ = '/static/audio/cancion-navidad.mp3';
-const AUDIO_CON_LUZ = '/static/audio/background-music-2.mp3';
-
 const formatPrice = (n) => (n == null || n === '' ? '' : `$${Number(n).toLocaleString('es-AR')}`);
+
+/** URLs que empiezan con /media/ se sirven desde el backend; el resto desde el mismo origen (front). */
+const getMediaSrc = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('/media/')) {
+    const base = (api.baseUrl || '').replace(/\/$/, '');
+    return base ? `${base}${url.startsWith('/') ? url : `/${url}`}` : url;
+  }
+  return url;
+};
 
 const Home = () => {
   const [sinLuz, setSinLuz] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [prices, setPrices] = useState(DEFAULT_PRICES);
+  const [background, setBackground] = useState({
+    video_sin_luz: '',
+    video_con_luz: '',
+    audio_sin_luz: '',
+    audio_con_luz: '',
+  });
   const videoRef = useRef(null);
   const audioRef = useRef(null);
 
   useEffect(() => {
     api.getPrices(false).then((data) => {
       if (data && typeof data === 'object') setPrices((prev) => ({ ...DEFAULT_PRICES, ...prev, ...data }));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api.getHomeBackground(false).then((data) => {
+      if (data && typeof data === 'object') {
+        setBackground({
+          video_sin_luz: data.video_sin_luz ?? '',
+          video_con_luz: data.video_con_luz ?? '',
+          audio_sin_luz: data.audio_sin_luz ?? '',
+          audio_con_luz: data.audio_con_luz ?? '',
+        });
+      }
     }).catch(() => {});
   }, []);
 
@@ -50,27 +74,30 @@ const Home = () => {
 
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.src = sinLuz ? AUDIO_SIN_LUZ : AUDIO_CON_LUZ;
+      const raw = sinLuz ? background.audio_sin_luz : background.audio_con_luz;
+      audioRef.current.src = getMediaSrc(raw) || raw;
       audioRef.current.load();
       audioRef.current.play().catch(() => {});
     }
-  }, []);
+  }, [background.audio_sin_luz, background.audio_con_luz]);
 
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.src = sinLuz ? VIDEO_SIN_LUZ : VIDEO_CON_LUZ;
+      const rawV = sinLuz ? background.video_sin_luz : background.video_con_luz;
+      videoRef.current.src = getMediaSrc(rawV) || rawV;
       videoRef.current.load();
       videoRef.current.play().catch(() => {});
     }
     if (audioRef.current) {
       const wasPlaying = !audioRef.current.paused;
-      audioRef.current.src = sinLuz ? AUDIO_SIN_LUZ : AUDIO_CON_LUZ;
+      const rawA = sinLuz ? background.audio_sin_luz : background.audio_con_luz;
+      audioRef.current.src = getMediaSrc(rawA) || rawA;
       audioRef.current.load();
       if (wasPlaying || !isMuted) {
         audioRef.current.play().catch(() => {});
       }
     }
-  }, [sinLuz]);
+  }, [sinLuz, background.video_sin_luz, background.video_con_luz, background.audio_sin_luz, background.audio_con_luz]);
 
   useEffect(() => {
     const playOnInteraction = () => {
@@ -92,7 +119,7 @@ const Home = () => {
   return (
     <div className="home-landing">
       <audio ref={audioRef} loop preload="auto">
-        <source src={sinLuz ? AUDIO_SIN_LUZ : AUDIO_CON_LUZ} type="audio/mpeg" />
+        <source src={getMediaSrc(sinLuz ? background.audio_sin_luz : background.audio_con_luz)} type="audio/mpeg" />
       </audio>
       {/* Barra superior */}
       <header className="home-topbar">
@@ -130,7 +157,7 @@ const Home = () => {
           loop
           muted
           playsInline
-          src={sinLuz ? VIDEO_SIN_LUZ : VIDEO_CON_LUZ}
+          src={getMediaSrc(sinLuz ? background.video_sin_luz : background.video_con_luz)}
         />
         <div className="home-hero-bg" />
         <div className="home-hero-content">

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import Cropper from 'react-easy-crop';
 import JSZip from 'jszip';
@@ -136,12 +137,15 @@ const AdminDashboard = () => {
   const [hidingOrderId, setHidingOrderId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuPosition, setMenuPosition] = useState(null);
   const [downloadingZipId, setDownloadingZipId] = useState(null);
   const [zipError, setZipError] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [cropEditor, setCropEditor] = useState(null);
   const adminCropPixelsRef = useRef(null);
   const previewOverlayRef = useRef(null);
+  const menuTriggerRef = useRef(null);
+  const menuDropdownRef = useRef(null);
 
   const loadOrders = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -164,11 +168,32 @@ const AdminDashboard = () => {
     return () => window.removeEventListener('orders-update', handler);
   }, [loadOrdersWithCurrentFilter]);
 
+  useLayoutEffect(() => {
+    if (!openMenuId || !menuTriggerRef.current) {
+      setMenuPosition(null);
+      return;
+    }
+    const rect = menuTriggerRef.current.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+    });
+  }, [openMenuId]);
+
   useEffect(() => {
     if (openMenuId == null) return;
     const close = () => setOpenMenuId(null);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
+    const handler = (e) => {
+      if (menuTriggerRef.current?.contains(e.target) || menuDropdownRef.current?.contains(e.target)) return;
+      close();
+    };
+    const onScroll = () => close();
+    document.addEventListener('click', handler);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('click', handler);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, [openMenuId]);
 
   useEffect(() => {
@@ -532,87 +557,21 @@ const AdminDashboard = () => {
                           <button
                             type="button"
                             className="admin-btn-menu-trigger"
-                            onClick={() => setOpenMenuId((id) => (id === p.id ? null : p.id))}
+                            ref={openMenuId === p.id ? menuTriggerRef : null}
+                            onClick={(ev) => {
+                              if (openMenuId === p.id) {
+                                setOpenMenuId(null);
+                              } else {
+                                menuTriggerRef.current = ev.currentTarget;
+                                setOpenMenuId(p.id);
+                              }
+                            }}
                             aria-expanded={openMenuId === p.id}
                             aria-haspopup="true"
                             aria-label="Abrir menú de acciones"
                           >
                             <span className="admin-btn-menu-dots" aria-hidden>⋯</span>
                           </button>
-                          {openMenuId === p.id && (
-                            <div className="admin-orders-dropdown" role="menu">
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="admin-orders-dropdown-item admin-orders-dropdown-ver"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  openDetail(p.id);
-                                }}
-                              >
-                                Ver
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="admin-orders-dropdown-item admin-orders-dropdown-zip"
-                                disabled={downloadingZipId === p.id}
-                                onClick={() => downloadOrderZip(p)}
-                              >
-                                {downloadingZipId === p.id ? '...' : 'Descargar zip'}
-                              </button>
-                              {(p.status === 'draft' || p.status === 'delivered') && p.active !== false && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-ocultar"
-                                  disabled={hidingOrderId === p.id}
-                                  onClick={(ev) => {
-                                    setOpenMenuId(null);
-                                    hideDraft(ev, p.id);
-                                  }}
-                                >
-                                  {hidingOrderId === p.id ? '...' : 'Ocultar'}
-                                </button>
-                              )}
-                              {showHiddenOrders && p.active === false && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-mostrar"
-                                  disabled={hidingOrderId === p.id}
-                                  onClick={(ev) => {
-                                    setOpenMenuId(null);
-                                    showOrder(ev, p.id);
-                                  }}
-                                >
-                                  {hidingOrderId === p.id ? '...' : 'Mostrar'}
-                                </button>
-                              )}
-                              {(p.status === 'in_progress' || p.status === 'sent') && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-status"
-                                  disabled={updatingStatusId === p.id}
-                                  onClick={() => changeOrderStatus(p.id, 'processing')}
-                                >
-                                  {updatingStatusId === p.id ? '...' : 'Pasar a Finalizado'}
-                                </button>
-                              )}
-                              {p.status === 'processing' && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-status"
-                                  disabled={updatingStatusId === p.id}
-                                  onClick={() => changeOrderStatus(p.id, 'delivered')}
-                                >
-                                  {updatingStatusId === p.id ? '...' : 'Pasar a Entregado'}
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -623,6 +582,99 @@ const AdminDashboard = () => {
           )}
         </section>
       </div>
+
+      {openMenuId != null && menuPosition != null && (() => {
+        const p = pedidos.find((o) => o.id === openMenuId);
+        if (!p) return null;
+        return createPortal(
+          <div
+            ref={menuDropdownRef}
+            className="admin-orders-dropdown admin-orders-dropdown-portal"
+            role="menu"
+            style={{
+              position: 'fixed',
+              top: menuPosition.top,
+              right: menuPosition.right,
+              width: 'max-content',
+              minWidth: '8.5rem',
+              zIndex: 1050,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-orders-dropdown-item admin-orders-dropdown-ver"
+              onClick={() => {
+                setOpenMenuId(null);
+                openDetail(p.id);
+              }}
+            >
+              Ver
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-orders-dropdown-item admin-orders-dropdown-zip"
+              disabled={downloadingZipId === p.id}
+              onClick={() => downloadOrderZip(p)}
+            >
+              {downloadingZipId === p.id ? '...' : 'Descargar zip'}
+            </button>
+            {(p.status === 'draft' || p.status === 'delivered') && p.active !== false && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-ocultar"
+                disabled={hidingOrderId === p.id}
+                onClick={(ev) => {
+                  setOpenMenuId(null);
+                  hideDraft(ev, p.id);
+                }}
+              >
+                {hidingOrderId === p.id ? '...' : 'Ocultar'}
+              </button>
+            )}
+            {showHiddenOrders && p.active === false && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-mostrar"
+                disabled={hidingOrderId === p.id}
+                onClick={(ev) => {
+                  setOpenMenuId(null);
+                  showOrder(ev, p.id);
+                }}
+              >
+                {hidingOrderId === p.id ? '...' : 'Mostrar'}
+              </button>
+            )}
+            {(p.status === 'in_progress' || p.status === 'sent') && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-status"
+                disabled={updatingStatusId === p.id}
+                onClick={() => changeOrderStatus(p.id, 'processing')}
+              >
+                {updatingStatusId === p.id ? '...' : 'Pasar a Finalizado'}
+              </button>
+            )}
+            {p.status === 'processing' && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-status"
+                disabled={updatingStatusId === p.id}
+                onClick={() => changeOrderStatus(p.id, 'delivered')}
+              >
+                {updatingStatusId === p.id ? '...' : 'Pasar a Entregado'}
+              </button>
+            )}
+          </div>,
+          document.body
+        );
+      })()}
 
       {detailLoading && (
         <div className="admin-detail-overlay" onClick={() => setDetailLoading(false)}>
