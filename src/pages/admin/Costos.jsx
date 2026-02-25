@@ -53,6 +53,9 @@ const PURCHASE_CATEGORIES = [
   { value: 'pla_roll', label: 'Rollo PLA' },
 ];
 
+/** Mapeo category → label para mostrar en tabla de compras cuando no viene category_display. */
+const CATEGORY_DISPLAY_LABELS = Object.fromEntries(PURCHASE_CATEGORIES.map((c) => [c.value, c.label]));
+
 const COSTOS_TABS = [
   { id: 0, label: 'Compras y gastos' },
   { id: 1, label: 'Costos de referencia' },
@@ -500,7 +503,7 @@ const AdminCostos = () => {
                       return (
                         <tr key={p.id}>
                           <td>{p.date ? new Date(p.date + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
-                          <td>{p.category_display || p.category || '—'}</td>
+                          <td>{p.category_display || CATEGORY_DISPLAY_LABELS[p.category] || p.category || '—'}</td>
                           <td className="admin-costos-num">{qty}</td>
                           <td className="admin-costos-num">${total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
                           <td className="admin-costos-num">${unit.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>

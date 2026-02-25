@@ -1,6 +1,27 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import api from '../../restclient/api';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const formatDate = (str) => {
   if (!str) return '';
@@ -30,6 +51,98 @@ const PURCHASE_CATEGORY_LABELS = {
 };
 /** Categorías que no se muestran en Últimos movimientos (ya están en el costo de producción del pedido). */
 const PURCHASE_CATEGORIES_EXCLUIDAS_MOVIMIENTOS = ['imagenes', 'caja_carton', 'bolsa_ecommerce'];
+
+const DAY_NAMES = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/** Prepara datos para el gráfico de línea (suma de ventas por día/mes/año). Igual lógica que TotalVentas. */
+function prepareChartData(ventasPorDia, ventasPorMes, detail, viewMode) {
+  if (!detail || !Array.isArray(detail)) return { labels: [], datasets: [] };
+  const aggByDay = {};
+  const aggByMonth = {};
+  const aggByYear = {};
+  detail.forEach((o) => {
+    const dateStr = o.date ? String(o.date).slice(0, 10) : '';
+    const amount = Number(o.precio_venta) || 0;
+    if (dateStr.length >= 10) {
+      aggByDay[dateStr] = (aggByDay[dateStr] || 0) + amount;
+      const monthKey = dateStr.slice(0, 7);
+      aggByMonth[monthKey] = (aggByMonth[monthKey] || 0) + amount;
+      const yearKey = dateStr.slice(0, 4);
+      aggByYear[yearKey] = (aggByYear[yearKey] || 0) + amount;
+    }
+  });
+
+  const colorTotal = { border: 'rgba(54, 162, 235, 1)', background: 'rgba(54, 162, 235, 0.2)' };
+
+  if (viewMode === 'year') {
+    const sortedYears = Object.keys(aggByYear).sort();
+    if (sortedYears.length === 0) return { labels: [], datasets: [] };
+    return {
+      labels: sortedYears,
+      datasets: [{
+        label: 'Total ventas',
+        data: sortedYears.map((y) => aggByYear[y]),
+        borderColor: colorTotal.border,
+        backgroundColor: colorTotal.background,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.1,
+      }],
+    };
+  }
+
+  if (viewMode === 'month') {
+    const sortedMonths = (ventasPorMes || []).map((d) => d.month).filter(Boolean);
+    if (sortedMonths.length === 0) return { labels: [], datasets: [] };
+    const labels = sortedMonths.map((month) => {
+      const [y, m] = month.split('-');
+      const monthIndex = parseInt(m, 10) - 1;
+      return `${MONTH_NAMES[monthIndex] || m} ${y}`;
+    });
+    return {
+      labels,
+      datasets: [{
+        label: 'Total ventas',
+        data: sortedMonths.map((month) => aggByMonth[month] || 0),
+        borderColor: colorTotal.border,
+        backgroundColor: colorTotal.background,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.1,
+      }],
+    };
+  }
+
+  // viewMode === 'day': cantidad = pedidos en detail ese día (misma fuente que el total $)
+  const sortedDays = (ventasPorDia || []).map((d) => d.date).filter(Boolean);
+  if (sortedDays.length === 0) return { labels: [], datasets: [] };
+  const norm = (s) => (s || '').toString().slice(0, 10);
+  const dayCounts = sortedDays.map((dateStr) =>
+    detail.filter((o) => norm(o.date) === norm(dateStr)).length
+  );
+  const labels = sortedDays.map((dateStr) => {
+    const [year, month, dayNum] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, dayNum));
+    const dayOfWeek = DAY_NAMES[date.getUTCDay()];
+    const dayNumStr = String(dayNum).padStart(2, '0');
+    const monthName = MONTH_NAMES[month - 1];
+    return `${dayOfWeek} ${dayNumStr} ${monthName}`;
+  });
+  return {
+    labels,
+    datasets: [{
+      label: 'Total ventas',
+      data: sortedDays.map((dateStr) => aggByDay[dateStr] || 0),
+      countData: dayCounts,
+      borderColor: colorTotal.border,
+      backgroundColor: colorTotal.background,
+      borderWidth: 2,
+      fill: false,
+      tension: 0.1,
+    }],
+  };
+}
 
 /** Popover que muestra el desglose del costo de producción. placeAbove: en tabla, abre hacia arriba para no tapar Margen.
  * boxType: 'no_light' → no mostrar Caja (cajita), sí PLA si > 0. 'with_light' → mostrar Caja si > 0, no mostrar PLA. */
@@ -84,7 +197,6 @@ const AdminEstadisticas = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [otrosGastosTotal, setOtrosGastosTotal] = useState(0);
   const [chartDays, setChartDays] = useState(30);
   const [chartMonths, setChartMonths] = useState(12);
   const [popoverFor, setPopoverFor] = useState(null);
@@ -92,6 +204,7 @@ const AdminEstadisticas = () => {
   const [popoverPosition, setPopoverPosition] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [purchases, setPurchases] = useState([]);
+  const [chartViewMode, setChartViewMode] = useState('day'); // 'day' | 'month' | 'year'
 
   useEffect(() => {
     setLoading(true);
@@ -157,12 +270,12 @@ const AdminEstadisticas = () => {
 
   const totalVentas = summary.total_ventas;
   const totalCostos = summary.total_costos;
-  const otrosGastos = Number(otrosGastosTotal) || 0;
-  const balance = totalVentas - totalCostos - otrosGastos;
   const cantidadVentas = summary.cantidad_ventas;
 
-  const maxDia = Math.max(1, ...ventasPorDia.map((d) => d.count));
-  const maxMes = Math.max(1, ...ventasPorMes.map((d) => d.count));
+  const chartData = useMemo(
+    () => prepareChartData(ventasPorDia, ventasPorMes, detail, chartViewMode),
+    [ventasPorDia, ventasPorMes, detail, chartViewMode]
+  );
 
   if (loading) {
     return (
@@ -175,7 +288,6 @@ const AdminEstadisticas = () => {
     );
   }
 
-  const promedioTicket = cantidadVentas > 0 ? totalVentas / cantidadVentas : 0;
   const orderForPopover = isTablePopover ? (detail || []).find((o) => o.id === popoverFor) : null;
 
   return (
@@ -210,171 +322,135 @@ const AdminEstadisticas = () => {
         </div>
       </div>
 
-      {/* Pestaña 0: Resumen (filtros, gráficos, ventas y costos) */}
+      {/* Pestaña 0: Resumen (gráficos, ventas y costos) */}
       {activeTab === 0 && (
       <>
-      {/* Filtros - card superior estilo dashboard */}
-      <section className="admin-estadisticas-filtros-card">
-        <h2 className="admin-estadisticas-filtros-title">Filtros</h2>
-        <div className="admin-estadisticas-filtros-row">
-          <div className="admin-estadisticas-tabs">
-            <span className="admin-estadisticas-tab-label">Vista:</span>
-            <button
-              type="button"
-              className="admin-estadisticas-tab admin-estadisticas-tab--active"
-              aria-pressed="true"
-            >
-              Por días
-            </button>
-            <button type="button" className="admin-estadisticas-tab" aria-pressed="false">
-              Por meses
-            </button>
-          </div>
-          <div className="admin-estadisticas-filtros-controls">
-            <label className="admin-estadisticas-filtro-label">
-              Últimos{' '}
-              <select
-                value={chartDays}
-                onChange={(e) => setChartDays(Number(e.target.value))}
-                className="admin-estadisticas-select"
+      <div className="admin-estadisticas-charts admin-estadisticas-charts--resumen-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'stretch', marginBottom: '1.5rem' }}>
+        <section className="admin-estadisticas-card admin-estadisticas-card--chart" style={{ minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+            <h2 className="admin-estadisticas-card-title admin-estadisticas-card-title--accent" style={{ margin: 0 }}>
+              Suma de ventas {chartViewMode === 'year' ? 'por año' : chartViewMode === 'month' ? 'por mes' : 'por día'}
+            </h2>
+            <div className="admin-estadisticas-tabs" style={{ margin: 0 }}>
+              <button
+                type="button"
+                className={`admin-estadisticas-tab ${chartViewMode === 'day' ? 'admin-estadisticas-tab--active' : ''}`}
+                aria-pressed={chartViewMode === 'day'}
+                onClick={() => setChartViewMode('day')}
               >
-                <option value={7}>7</option>
-                <option value={14}>14</option>
-                <option value={30}>30</option>
-                <option value={60}>60</option>
-              </select>{' '}
-              días
-            </label>
-            <label className="admin-estadisticas-filtro-label">
-              Últimos{' '}
-              <select
-                value={chartMonths}
-                onChange={(e) => setChartMonths(Number(e.target.value))}
-                className="admin-estadisticas-select"
+                Día
+              </button>
+              <button
+                type="button"
+                className={`admin-estadisticas-tab ${chartViewMode === 'month' ? 'admin-estadisticas-tab--active' : ''}`}
+                aria-pressed={chartViewMode === 'month'}
+                onClick={() => setChartViewMode('month')}
               >
-                <option value={6}>6</option>
-                <option value={12}>12</option>
-                <option value={24}>24</option>
-              </select>{' '}
-              meses
-            </label>
-          </div>
-          <button
-            type="button"
-            className="admin-estadisticas-btn-actualizar"
-            onClick={() => api.getEstadisticas(chartDays, chartMonths).then(setStats).catch(() => setError('Error al actualizar.'))}
-          >
-            <span className="admin-estadisticas-btn-icon" aria-hidden>↻</span>
-            Actualizar
-          </button>
-        </div>
-      </section>
-
-      <div className="admin-estadisticas-charts">
-        <section className="admin-estadisticas-card admin-estadisticas-card--chart">
-          <h2 className="admin-estadisticas-card-title admin-estadisticas-card-title--accent">Ventas por día</h2>
-          <div className="admin-estadisticas-kpi-row">
-            <div className="admin-estadisticas-kpi">
-              <span className="admin-estadisticas-kpi-label">Cantidad</span>
-              <span className="admin-estadisticas-kpi-value admin-estadisticas-kpi-value--blue">#{ventasPorDia.reduce((s, d) => s + d.count, 0)}</span>
+                Mes
+              </button>
+              <button
+                type="button"
+                className={`admin-estadisticas-tab ${chartViewMode === 'year' ? 'admin-estadisticas-tab--active' : ''}`}
+                aria-pressed={chartViewMode === 'year'}
+                onClick={() => setChartViewMode('year')}
+              >
+                Año
+              </button>
             </div>
           </div>
-          <div className="admin-estadisticas-bars" role="img" aria-label="Gráfico de ventas por día">
-            {ventasPorDia.map((d) => (
-              <div key={d.date} className="admin-estadisticas-bar-wrap">
-                <div
-                  className="admin-estadisticas-bar"
-                  style={{ height: `${(d.count / maxDia) * 100}%` }}
-                  title={`${formatDate(d.date)}: ${d.count} ventas`}
-                />
-                <span className="admin-estadisticas-bar-label">{d.date.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-          <p className="admin-estadisticas-hint">Pedidos finalizados o entregados por día.</p>
+          {chartData.datasets.length > 0 && chartData.labels.length > 0 ? (
+            <div style={{ position: 'relative', flex: 1, minHeight: '280px' }}>
+              <Line
+                data={chartData}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true } },
+                    tooltip: {
+                      callbacks: {
+                        label: (context) => {
+                          const v = context.parsed?.y ?? context.raw;
+                          const lines = [`${context.dataset.label}: ${formatMoney(v)}`];
+                          if (chartViewMode === 'day' && context.dataset.countData) {
+                            const count = context.dataset.countData[context.dataIndex] ?? 0;
+                            lines.push(`Cantidad vendida: ${count}`);
+                          }
+                          return lines;
+                        },
+                      },
+                    },
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      ticks: {
+                        callback: (value) => {
+                          if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                          if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+                          return formatMoney(value);
+                        },
+                      },
+                    },
+                    x: {
+                      ticks: {
+                        maxRotation: chartViewMode === 'day' ? 90 : 45,
+                        minRotation: chartViewMode === 'day' ? 90 : 45,
+                      },
+                    },
+                  },
+                }}
+              />
+            </div>
+          ) : (
+            <p className="admin-estadisticas-hint">No hay datos de ventas para el período seleccionado.</p>
+          )}
+          <p className="admin-estadisticas-hint" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+            Pedidos finalizados o entregados. Total en $ por {chartViewMode === 'year' ? 'año' : chartViewMode === 'month' ? 'mes' : 'día'}.
+          </p>
         </section>
 
-        <section className="admin-estadisticas-card admin-estadisticas-card--chart">
-          <h2 className="admin-estadisticas-card-title admin-estadisticas-card-title--accent">Ventas por mes</h2>
-          <div className="admin-estadisticas-kpi-row">
-            <div className="admin-estadisticas-kpi">
+        <section className="admin-estadisticas-card admin-estadisticas-card--resumen admin-estadisticas-card--resumen-side">
+          <h2 className="admin-estadisticas-card-title admin-estadisticas-card-title--accent">Ventas totales y costos</h2>
+          <div className="admin-estadisticas-resumen-grid admin-estadisticas-resumen-grid--four">
+            <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block">
+              <span className="admin-estadisticas-kpi-label">Total</span>
+              <span className="admin-estadisticas-kpi-value admin-estadisticas-kpi-value--blue">{formatMoney(totalVentas)}</span>
+            </div>
+            <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block">
               <span className="admin-estadisticas-kpi-label">Cantidad</span>
-              <span className="admin-estadisticas-kpi-value admin-estadisticas-kpi-value--blue">#{ventasPorMes.reduce((s, d) => s + d.count, 0)}</span>
+              <span className="admin-estadisticas-kpi-value">#{cantidadVentas}</span>
+            </div>
+            <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block admin-estadisticas-kpi--with-popover" ref={popoverFor === 'total' ? popoverAnchorRef : null}>
+              <span className="admin-estadisticas-kpi-label">Total costos producción</span>
+              <span className="admin-estadisticas-kpi-value">{formatMoney(totalCostos)}</span>
+              <button
+                type="button"
+                className="admin-estadisticas-popover-trigger"
+                onClick={(e) => { e.stopPropagation(); setPopoverFor((p) => (p === 'total' ? null : 'total')); }}
+                aria-label="Ver desglose del costo"
+                title="Ver cálculo"
+              >
+                ℹ
+              </button>
+              {popoverFor === 'total' && (
+                <CostoPopover
+                  breakdown={null}
+                  totalLabel="Suma del costo de producción de cada pedido. Cada pedido: Caja + PLA + Empaque (valores al finalizar)."
+                  onClose={() => setPopoverFor(null)}
+                  anchorRef={popoverAnchorRef}
+                />
+              )}
+            </div>
+            <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block">
+              <span className="admin-estadisticas-kpi-label">Balance (ingresos − gastos)</span>
+              <span className={`admin-estadisticas-kpi-value ${balanceMovimientos >= 0 ? 'admin-estadisticas-kpi-value--orange' : 'admin-estadisticas-negativo'}`}>
+                {formatMoney(balanceMovimientos)}
+              </span>
             </div>
           </div>
-          <div className="admin-estadisticas-bars admin-estadisticas-bars--month" role="img" aria-label="Gráfico de ventas por mes">
-            {ventasPorMes.map((d) => (
-              <div key={d.month} className="admin-estadisticas-bar-wrap">
-                <div
-                  className="admin-estadisticas-bar admin-estadisticas-bar--month"
-                  style={{ height: `${(d.count / maxMes) * 100}%` }}
-                  title={`${formatMonth(d.month)}: ${d.count} ventas`}
-                />
-                <span className="admin-estadisticas-bar-label">{formatMonth(d.month)}</span>
-              </div>
-            ))}
-          </div>
-          <p className="admin-estadisticas-hint">Pedidos finalizados o entregados por mes.</p>
         </section>
       </div>
-
-      <section className="admin-estadisticas-card admin-estadisticas-card--resumen">
-        <h2 className="admin-estadisticas-card-title admin-estadisticas-card-title--accent">Ventas totales y costos</h2>
-        <div className="admin-estadisticas-resumen-grid">
-          <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block">
-            <span className="admin-estadisticas-kpi-label">Total</span>
-            <span className="admin-estadisticas-kpi-value admin-estadisticas-kpi-value--blue">{formatMoney(totalVentas)}</span>
-          </div>
-          <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block">
-            <span className="admin-estadisticas-kpi-label">Cantidad</span>
-            <span className="admin-estadisticas-kpi-value">#{cantidadVentas}</span>
-          </div>
-          <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block">
-            <span className="admin-estadisticas-kpi-label">Promedio ticket</span>
-            <span className="admin-estadisticas-kpi-value admin-estadisticas-kpi-value--orange">{formatMoney(promedioTicket.toFixed(2))}</span>
-          </div>
-        </div>
-        <div className="admin-estadisticas-otros-gastos">
-          <span className="admin-estadisticas-kpi-label">Otros gastos totales ($)</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={otrosGastosTotal}
-            onChange={(e) => setOtrosGastosTotal(e.target.value)}
-            className="admin-estadisticas-input-inline"
-          />
-        </div>
-        <div className="admin-estadisticas-resumen-grid admin-estadisticas-resumen-grid--balance">
-          <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block admin-estadisticas-kpi--with-popover" ref={popoverFor === 'total' ? popoverAnchorRef : null}>
-            <span className="admin-estadisticas-kpi-label">Total costos producción</span>
-            <span className="admin-estadisticas-kpi-value">{formatMoney(totalCostos)}</span>
-            <button
-              type="button"
-              className="admin-estadisticas-popover-trigger"
-              onClick={(e) => { e.stopPropagation(); setPopoverFor((p) => (p === 'total' ? null : 'total')); }}
-              aria-label="Ver desglose del costo"
-              title="Ver cálculo"
-            >
-              ℹ
-            </button>
-            {popoverFor === 'total' && (
-              <CostoPopover
-                breakdown={null}
-                totalLabel="Suma del costo de producción de cada pedido. Cada pedido: Caja + PLA + Empaque (valores al finalizar)."
-                onClose={() => setPopoverFor(null)}
-                anchorRef={popoverAnchorRef}
-              />
-            )}
-          </div>
-          <div className="admin-estadisticas-kpi admin-estadisticas-kpi--block">
-            <span className="admin-estadisticas-kpi-label">Balance (ventas − costos − otros)</span>
-            <span className={`admin-estadisticas-kpi-value ${balance >= 0 ? 'admin-estadisticas-kpi-value--orange' : 'admin-estadisticas-negativo'}`}>
-              {formatMoney(balance)}
-            </span>
-          </div>
-        </div>
-      </section>
       </>
       )}
 
@@ -390,6 +466,7 @@ const AdminEstadisticas = () => {
           <span className={balanceMovimientos >= 0 ? 'admin-estadisticas-ganancia-positiva' : 'admin-estadisticas-negativo'}>
             {formatMoney(balanceMovimientos)}
           </span>
+          <span className="admin-estadisticas-hint" style={{ display: 'block', marginTop: '0.25rem' }}>Incluye ventas y todos los gastos del período (Compras y gastos).</span>
         </p>
         <div className="admin-estadisticas-table-wrap">
           <table className="admin-estadisticas-tabla admin-estadisticas-tabla-movimientos">

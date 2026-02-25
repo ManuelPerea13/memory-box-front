@@ -2648,7 +2648,8 @@ a:hover {
   top: 100%;
   right: 0;
   margin-top: 0.25rem;
-  min-width: 8rem;
+  width: max-content;
+  min-width: 8.5rem;
   padding: 0.35rem 0;
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -4457,8 +4458,32 @@ a:hover {
   gap: 1.5rem;
   margin-bottom: 1.5rem;
 }
+/* Gráfico y card resumen a la misma altura y tamaño (50% cada uno) */
+.admin-estadisticas-charts--resumen-row {
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+}
+.admin-estadisticas-charts--resumen-row .admin-estadisticas-card--chart {
+  min-height: 400px;
+}
+.admin-estadisticas-charts--resumen-row .admin-estadisticas-card--resumen-side {
+  align-self: start;
+  min-height: 0;
+}
+.admin-estadisticas-card--resumen-side {
+  max-width: none;
+  width: 100%;
+}
+.admin-estadisticas-card--resumen-side .admin-estadisticas-resumen-grid--four {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
 @media (max-width: 900px) {
   .admin-estadisticas-charts {
+    grid-template-columns: 1fr;
+  }
+  .admin-estadisticas-charts--resumen-row {
     grid-template-columns: 1fr;
   }
 }
