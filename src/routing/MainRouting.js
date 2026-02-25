@@ -8,6 +8,10 @@ import AdminLogin from '../pages/admin/Login';
 import AdminDashboard from '../pages/admin/Dashboard';
 import AdminStock from '../pages/admin/Stock';
 import AdminPrecios from '../pages/admin/Precios';
+import AdminCostos from '../pages/admin/Costos';
+import AdminFondo from '../pages/admin/Fondo';
+import AdminVariantes from '../pages/admin/Variantes';
+import AdminEstadisticas from '../pages/admin/Estadisticas';
 import AdminLayout from '../components/admin/AdminLayout';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 
@@ -28,6 +32,10 @@ const MainRouting = () => {
         <Route index element={<AdminDashboard />} />
         <Route path="stock" element={<AdminStock />} />
         <Route path="precios" element={<AdminPrecios />} />
+        <Route path="costos" element={<AdminCostos />} />
+        <Route path="fondo" element={<AdminFondo />} />
+        <Route path="variantes" element={<AdminVariantes />} />
+        <Route path="estadisticas" element={<AdminEstadisticas />} />
       </Route>
       <Route path="/" element={<Home />} />
       <Route path="/cliente" element={<ClientData />} />
