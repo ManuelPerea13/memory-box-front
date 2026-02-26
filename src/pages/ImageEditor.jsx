@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import Cropper from 'react-easy-crop';
+import Cropper, { getInitialCropFromCroppedAreaPixels } from 'react-easy-crop';
 import api from '../restclient/api';
 
 const REQUIRED_COUNT = 10;
@@ -84,6 +84,8 @@ const getCenteredSquareCrop = (width, height) => {
 };
 
 const THUMB_PREVIEW_SIZE = 200;
+/** Tamaño fijo del recuadro de corte (cuadrado). Misma medida para imagen vertical u horizontal. */
+const CROP_BOX_SIZE = 420;
 
 const createCroppedPreviewDataUrl = (imageUrl, crop) =>
   new Promise((resolve, reject) => {
@@ -135,6 +137,34 @@ const ImageEditor = () => {
   const [selectedPhraseIndexes, setSelectedPhraseIndexes] = useState([]);
   const [thumbPreviews, setThumbPreviews] = useState({});
   const cropPixelsRef = useRef(null);
+  const mainContainerRef = useRef(null);
+  const cropPositionRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const cropRAFRef = useRef(null);
+  const zoomRAFRef = useRef(null);
+  const [cropWrapSize, setCropWrapSize] = useState({ width: CROP_BOX_SIZE, height: CROP_BOX_SIZE });
+  const [cropMediaLoading, setCropMediaLoading] = useState(false);
+  const selectedImageId = selectedIndex >= 0 && selectedIndex < images.length ? images[selectedIndex]?.id : null;
+
+  // Mostrar carga cuando cambia la imagen a recortar
+  useEffect(() => {
+    if (selectedImageId) setCropMediaLoading(true);
+  }, [selectedImageId]);
+
+  // Recuadro de corte con medida fija (cuadrado) independiente de la orientación de la imagen
+  useEffect(() => {
+    const el = mainContainerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.offsetWidth || CROP_BOX_SIZE;
+      const size = Math.min(CROP_BOX_SIZE, w);
+      setCropWrapSize({ width: size, height: size });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [images.length > 0]);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,8 +245,35 @@ const ImageEditor = () => {
     return () => { cancelled = true; };
   }, [orderId]);
 
+  const onCropChangeThrottled = useCallback((newCrop) => {
+    cropPositionRef.current = newCrop;
+    if (cropRAFRef.current == null) {
+      cropRAFRef.current = requestAnimationFrame(() => {
+        setCrop(cropPositionRef.current);
+        cropRAFRef.current = null;
+      });
+    }
+  }, []);
+
+  const onZoomChangeThrottled = useCallback((newZoom) => {
+    zoomRef.current = newZoom;
+    if (zoomRAFRef.current == null) {
+      zoomRAFRef.current = requestAnimationFrame(() => {
+        const z = zoomRef.current;
+        setZoom(z);
+        if (z <= 1) {
+          cropPositionRef.current = { x: 0, y: 0 };
+          setCrop({ x: 0, y: 0 });
+        }
+        zoomRAFRef.current = null;
+      });
+    }
+  }, []);
+
   const onCropComplete = useCallback((_croppedArea, croppedAreaPixels) => {
     cropPixelsRef.current = croppedAreaPixels;
+    setCrop(cropPositionRef.current);
+    setZoom(zoomRef.current);
   }, []);
 
   const onCropAreaChange = useCallback((_croppedArea, croppedAreaPixels) => {
@@ -230,9 +287,34 @@ const ImageEditor = () => {
       const size = Math.min(w, h);
       const x = (w - size) / 2;
       const y = (h - size) / 2;
-      cropPixelsRef.current = { x, y, width: size, height: size };
+      const croppedAreaPixels = { x, y, width: size, height: size };
+      cropPixelsRef.current = croppedAreaPixels;
+      const cropSize = { width: cropWrapSize.width, height: cropWrapSize.height };
+      const { crop: initialCrop, zoom: initialZoom } = getInitialCropFromCroppedAreaPixels(
+        croppedAreaPixels,
+        mediaSize,
+        0,
+        cropSize,
+        1,
+        3
+      );
+      cropPositionRef.current = initialCrop;
+      zoomRef.current = initialZoom;
+      setCrop(initialCrop);
+      setZoom(initialZoom);
+      setImages((prev) => {
+        const next = [...prev];
+        if (next[selectedIndex]) {
+          next[selectedIndex] = {
+            ...next[selectedIndex],
+            crop: { x, y, w: size, h: size },
+          };
+        }
+        return next;
+      });
     }
-  }, [selectedIndex, images]);
+    setCropMediaLoading(false);
+  }, [selectedIndex, images, cropWrapSize.width, cropWrapSize.height]);
 
   const saveCurrentCrop = useCallback(() => {
     const pixels = cropPixelsRef.current;
@@ -303,6 +385,11 @@ const ImageEditor = () => {
     setImages([]);
     setSelectedIndex(-1);
     setFileInputKey((k) => k + 1);
+    if (cropRAFRef.current != null) cancelAnimationFrame(cropRAFRef.current);
+    if (zoomRAFRef.current != null) cancelAnimationFrame(zoomRAFRef.current);
+    cropRAFRef.current = zoomRAFRef.current = null;
+    cropPositionRef.current = { x: 0, y: 0 };
+    zoomRef.current = 1;
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     cropPixelsRef.current = null;
@@ -383,6 +470,8 @@ const ImageEditor = () => {
     setImages(next);
     if (selectedIndex === idx) {
       setSelectedIndex(next.length ? Math.min(idx, next.length - 1) : -1);
+      cropPositionRef.current = { x: 0, y: 0 };
+      zoomRef.current = 1;
       setCrop({ x: 0, y: 0 });
       setZoom(1);
     } else if (selectedIndex > idx) setSelectedIndex(selectedIndex - 1);
@@ -403,7 +492,12 @@ const ImageEditor = () => {
 
   const selectIndex = (idx) => {
     saveCurrentCrop();
+    if (cropRAFRef.current != null) cancelAnimationFrame(cropRAFRef.current);
+    if (zoomRAFRef.current != null) cancelAnimationFrame(zoomRAFRef.current);
+    cropRAFRef.current = zoomRAFRef.current = null;
     const img = images[idx];
+    cropPositionRef.current = { x: 0, y: 0 };
+    zoomRef.current = 1;
     if (img?.crop && img.crop.w > 0 && img.crop.h > 0) {
       setCrop({ x: 0, y: 0 });
       setZoom(1);
@@ -603,6 +697,7 @@ const ImageEditor = () => {
       </div>
 
         <div
+          ref={mainContainerRef}
           className={`image-editor-main image-editor-drop-zone ${images.length === 0 ? 'image-editor-drop-zone--empty' : 'image-editor-main--filled'} ${isDragging ? 'is-dragging' : ''}`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -610,7 +705,13 @@ const ImageEditor = () => {
         onClick={() => images.length === 0 && document.getElementById('image-editor-file')?.click()}
       >
         {images.length > 0 && currentImg ? (
-          <div className="image-editor-crop-wrap">
+          <div className="image-editor-crop-wrap" style={{ width: cropWrapSize.width, height: cropWrapSize.height }}>
+            {cropMediaLoading && (
+              <div className="image-editor-crop-loading" aria-live="polite" aria-busy="true">
+                <span className="image-editor-crop-loading-spinner" aria-hidden="true" />
+                <span className="image-editor-crop-loading-text">Cargando imagen…</span>
+              </div>
+            )}
             {images.length < REQUIRED_COUNT && (
               <label htmlFor="image-editor-file" className="image-editor-add-overlay">
                 <span className="image-editor-add-overlay-icon">+</span>
@@ -618,12 +719,16 @@ const ImageEditor = () => {
               </label>
             )}
             <Cropper
+              key={currentImg.id}
               image={currentImg.url}
               crop={crop}
               zoom={zoom}
               aspect={1}
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
+              objectFit="contain"
+              style={{ containerStyle: { backgroundColor: '#fff' } }}
+              cropSize={{ width: cropWrapSize.width, height: cropWrapSize.height }}
+              onCropChange={onCropChangeThrottled}
+              onZoomChange={onZoomChangeThrottled}
               onCropComplete={onCropComplete}
               onCropAreaChange={onCropAreaChange}
               onMediaLoaded={onMediaLoaded}
@@ -631,8 +736,10 @@ const ImageEditor = () => {
                 ? { x: savedCrop.x, y: savedCrop.y, width: savedCrop.w, height: savedCrop.h }
                 : undefined}
               cropShape="rect"
-              showGrid
+              showGrid={false}
+              classes={{ cropAreaClassName: 'image-editor-crop-area' }}
             />
+            <div className="image-editor-crop-line-guide" aria-hidden="true" />
           </div>
         ) : images.length === 0 ? (
           <div className="image-editor-empty">

@@ -136,9 +136,40 @@ const AdminDashboard = () => {
   const [contextMenu, setContextMenu] = useState(null);
   const [cropEditor, setCropEditor] = useState(null);
   const adminCropPixelsRef = useRef(null);
+  const adminCropAreaRef = useRef({ x: 0, y: 0 });
+  const adminZoomRef = useRef(1);
+  const adminCropRAFRef = useRef(null);
   const previewOverlayRef = useRef(null);
   const menuTriggerRef = useRef(null);
   const menuDropdownRef = useRef(null);
+
+  const adminCropAreaRAFRef = useRef(null);
+  const adminZoomRAFRef = useRef(null);
+
+  const adminOnCropChangeThrottled = useCallback((area) => {
+    adminCropAreaRef.current = area;
+    if (adminCropAreaRAFRef.current == null) {
+      adminCropAreaRAFRef.current = requestAnimationFrame(() => {
+        setCropEditor((prev) => (prev ? { ...prev, cropArea: adminCropAreaRef.current } : prev));
+        adminCropAreaRAFRef.current = null;
+      });
+    }
+  }, []);
+  const adminOnZoomChangeThrottled = useCallback((z) => {
+    adminZoomRef.current = z;
+    if (adminZoomRAFRef.current == null) {
+      adminZoomRAFRef.current = requestAnimationFrame(() => {
+        const newZoom = adminZoomRef.current;
+        if (newZoom <= 1) {
+          adminCropAreaRef.current = { x: 0, y: 0 };
+          setCropEditor((prev) => (prev ? { ...prev, zoom: newZoom, cropArea: { x: 0, y: 0 } } : prev));
+        } else {
+          setCropEditor((prev) => (prev ? { ...prev, zoom: newZoom } : prev));
+        }
+        adminZoomRAFRef.current = null;
+      });
+    }
+  }, []);
 
   const loadOrders = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -834,6 +865,7 @@ const AdminDashboard = () => {
                       step: 'crop',
                       file,
                       objectUrl,
+                      cropMediaLoading: true,
                     }));
                   }}
                 />
@@ -845,19 +877,32 @@ const AdminDashboard = () => {
             {cropEditor.step === 'crop' && cropEditor.objectUrl && (
               <div className="admin-crop-editor-crop">
                 <div className="admin-crop-editor-crop-wrap">
+                  {cropEditor.cropMediaLoading && (
+                    <div className="image-editor-crop-loading admin-crop-loading" aria-live="polite" aria-busy="true">
+                      <span className="image-editor-crop-loading-spinner" aria-hidden="true" />
+                      <span className="image-editor-crop-loading-text">Cargando imagen…</span>
+                    </div>
+                  )}
                   <Cropper
                     image={cropEditor.objectUrl}
                     crop={cropEditor.cropArea}
                     zoom={cropEditor.zoom}
                     aspect={1}
-                    onCropChange={(area) => setCropEditor((prev) => ({ ...prev, cropArea: area }))}
-                    onZoomChange={(z) => setCropEditor((prev) => ({ ...prev, zoom: z }))}
+                    objectFit="contain"
+                    style={{ containerStyle: { backgroundColor: '#fff' } }}
+                    cropSize={{ width: 420, height: 420 }}
+                    onCropChange={adminOnCropChangeThrottled}
+                    onZoomChange={adminOnZoomChangeThrottled}
                     onCropComplete={(_, croppedAreaPixels) => {
                       adminCropPixelsRef.current = croppedAreaPixels;
+                      setCropEditor((prev) => (prev ? { ...prev, cropArea: adminCropAreaRef.current, zoom: adminZoomRef.current } : prev));
                     }}
+                    onMediaLoaded={() => setCropEditor((prev) => ({ ...prev, cropMediaLoading: false }))}
                     cropShape="rect"
-                    showGrid
+                    showGrid={false}
+                    classes={{ cropAreaClassName: 'image-editor-crop-area' }}
                   />
+                  <div className="image-editor-crop-line-guide" aria-hidden="true" />
                 </div>
                 <div className="admin-crop-editor-actions">
                   <button
