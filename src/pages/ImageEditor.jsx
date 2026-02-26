@@ -140,6 +140,7 @@ const ImageEditor = () => {
   const mainContainerRef = useRef(null);
   const cropPositionRef = useRef({ x: 0, y: 0 });
   const zoomRef = useRef(1);
+  const prevZoomRef = useRef(1);
   const cropRAFRef = useRef(null);
   const zoomRAFRef = useRef(null);
   const [cropWrapSize, setCropWrapSize] = useState({ width: CROP_BOX_SIZE, height: CROP_BOX_SIZE });
@@ -245,7 +246,20 @@ const ImageEditor = () => {
     return () => { cancelled = true; };
   }, [orderId]);
 
+  /** Zoom por debajo del cual forzamos centro (para que no se desplace al hacer zoom out). */
+  const ZOOM_CENTER_THRESHOLD = 2;
   const onCropChangeThrottled = useCallback((newCrop) => {
+    const shouldForceCenter = zoomRef.current <= ZOOM_CENTER_THRESHOLD;
+    if (shouldForceCenter) {
+      cropPositionRef.current = { x: 0, y: 0 };
+      if (cropRAFRef.current == null) {
+        cropRAFRef.current = requestAnimationFrame(() => {
+          setCrop({ x: 0, y: 0 });
+          cropRAFRef.current = null;
+        });
+      }
+      return;
+    }
     cropPositionRef.current = newCrop;
     if (cropRAFRef.current == null) {
       cropRAFRef.current = requestAnimationFrame(() => {
@@ -260,8 +274,10 @@ const ImageEditor = () => {
     if (zoomRAFRef.current == null) {
       zoomRAFRef.current = requestAnimationFrame(() => {
         const z = zoomRef.current;
+        const wasZoomingOut = z < prevZoomRef.current;
+        prevZoomRef.current = z;
         setZoom(z);
-        if (z <= 1) {
+        if (wasZoomingOut) {
           cropPositionRef.current = { x: 0, y: 0 };
           setCrop({ x: 0, y: 0 });
         }
@@ -300,6 +316,7 @@ const ImageEditor = () => {
       );
       cropPositionRef.current = initialCrop;
       zoomRef.current = initialZoom;
+      prevZoomRef.current = initialZoom;
       setCrop(initialCrop);
       setZoom(initialZoom);
       setImages((prev) => {
@@ -390,6 +407,7 @@ const ImageEditor = () => {
     cropRAFRef.current = zoomRAFRef.current = null;
     cropPositionRef.current = { x: 0, y: 0 };
     zoomRef.current = 1;
+    prevZoomRef.current = 1;
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     cropPixelsRef.current = null;
@@ -472,6 +490,7 @@ const ImageEditor = () => {
       setSelectedIndex(next.length ? Math.min(idx, next.length - 1) : -1);
       cropPositionRef.current = { x: 0, y: 0 };
       zoomRef.current = 1;
+      prevZoomRef.current = 1;
       setCrop({ x: 0, y: 0 });
       setZoom(1);
     } else if (selectedIndex > idx) setSelectedIndex(selectedIndex - 1);
@@ -498,6 +517,7 @@ const ImageEditor = () => {
     const img = images[idx];
     cropPositionRef.current = { x: 0, y: 0 };
     zoomRef.current = 1;
+    prevZoomRef.current = 1;
     if (img?.crop && img.crop.w > 0 && img.crop.h > 0) {
       setCrop({ x: 0, y: 0 });
       setZoom(1);
@@ -724,6 +744,7 @@ const ImageEditor = () => {
               crop={crop}
               zoom={zoom}
               aspect={1}
+              minZoom={0.25}
               objectFit="contain"
               style={{ containerStyle: { backgroundColor: '#fff' } }}
               cropSize={{ width: cropWrapSize.width, height: cropWrapSize.height }}

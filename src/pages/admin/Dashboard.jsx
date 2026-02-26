@@ -138,6 +138,7 @@ const AdminDashboard = () => {
   const adminCropPixelsRef = useRef(null);
   const adminCropAreaRef = useRef({ x: 0, y: 0 });
   const adminZoomRef = useRef(1);
+  const adminPrevZoomRef = useRef(1);
   const adminCropRAFRef = useRef(null);
   const previewOverlayRef = useRef(null);
   const menuTriggerRef = useRef(null);
@@ -146,7 +147,18 @@ const AdminDashboard = () => {
   const adminCropAreaRAFRef = useRef(null);
   const adminZoomRAFRef = useRef(null);
 
+  const ADMIN_ZOOM_CENTER_THRESHOLD = 2;
   const adminOnCropChangeThrottled = useCallback((area) => {
+    if (adminZoomRef.current <= ADMIN_ZOOM_CENTER_THRESHOLD) {
+      adminCropAreaRef.current = { x: 0, y: 0 };
+      if (adminCropAreaRAFRef.current == null) {
+        adminCropAreaRAFRef.current = requestAnimationFrame(() => {
+          setCropEditor((prev) => (prev ? { ...prev, cropArea: { x: 0, y: 0 } } : prev));
+          adminCropAreaRAFRef.current = null;
+        });
+      }
+      return;
+    }
     adminCropAreaRef.current = area;
     if (adminCropAreaRAFRef.current == null) {
       adminCropAreaRAFRef.current = requestAnimationFrame(() => {
@@ -160,7 +172,9 @@ const AdminDashboard = () => {
     if (adminZoomRAFRef.current == null) {
       adminZoomRAFRef.current = requestAnimationFrame(() => {
         const newZoom = adminZoomRef.current;
-        if (newZoom <= 1) {
+        const wasZoomingOut = newZoom < adminPrevZoomRef.current;
+        adminPrevZoomRef.current = newZoom;
+        if (wasZoomingOut) {
           adminCropAreaRef.current = { x: 0, y: 0 };
           setCropEditor((prev) => (prev ? { ...prev, zoom: newZoom, cropArea: { x: 0, y: 0 } } : prev));
         } else {
@@ -818,6 +832,7 @@ const AdminDashboard = () => {
             type="button"
             className="admin-context-menu-item"
             onClick={() => {
+              adminPrevZoomRef.current = 1;
               setCropEditor({
                 crop: contextMenu.crop,
                 step: 'select',
@@ -888,6 +903,7 @@ const AdminDashboard = () => {
                     crop={cropEditor.cropArea}
                     zoom={cropEditor.zoom}
                     aspect={1}
+                    minZoom={0.25}
                     objectFit="contain"
                     style={{ containerStyle: { backgroundColor: '#fff' } }}
                     cropSize={{ width: 420, height: 420 }}
