@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import Cropper from 'react-easy-crop';
 import api from '../../restclient/api';
@@ -36,6 +37,24 @@ const sanitizeFileName = (name) => {
     .replace(/[/\\:*?"<>|]/g, '_')
     .replace(/\s+/g, ' ')
     .trim() || 'cliente';
+};
+
+const toZipClientSlug = (name) => {
+  const raw = sanitizeFileName(name);
+  // Remove accents/diacritics and any non-alphanumeric, then collapse.
+  return raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .trim() || 'cliente';
+};
+
+const toZipDate = (createdAt) => {
+  const d = createdAt ? new Date(createdAt) : new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
 };
 
 const STATUS_LABELS = {
@@ -129,12 +148,49 @@ const AdminDashboard = () => {
   const [hidingOrderId, setHidingOrderId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuPosition, setMenuPosition] = useState(null);
   const [downloadingZipId, setDownloadingZipId] = useState(null);
   const [zipError, setZipError] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [cropEditor, setCropEditor] = useState(null);
   const adminCropPixelsRef = useRef(null);
+  const adminCropAreaRef = useRef({ x: 0, y: 0 });
+  const adminZoomRef = useRef(1);
+  const adminPrevZoomRef = useRef(1);
+  const adminCropRAFRef = useRef(null);
   const previewOverlayRef = useRef(null);
+  const menuTriggerRef = useRef(null);
+  const menuDropdownRef = useRef(null);
+
+  const adminCropAreaRAFRef = useRef(null);
+  const adminZoomRAFRef = useRef(null);
+
+  const adminOnCropChangeThrottled = useCallback((area) => {
+    adminCropAreaRef.current = area;
+    if (adminCropAreaRAFRef.current == null) {
+      adminCropAreaRAFRef.current = requestAnimationFrame(() => {
+        setCropEditor((prev) => (prev ? { ...prev, cropArea: adminCropAreaRef.current } : prev));
+        adminCropAreaRAFRef.current = null;
+      });
+    }
+  }, []);
+  const adminOnZoomChangeThrottled = useCallback((z) => {
+    adminZoomRef.current = z;
+    if (adminZoomRAFRef.current == null) {
+      adminZoomRAFRef.current = requestAnimationFrame(() => {
+        const newZoom = adminZoomRef.current;
+        const wasZoomingOut = newZoom < adminPrevZoomRef.current;
+        adminPrevZoomRef.current = newZoom;
+        if (wasZoomingOut) {
+          adminCropAreaRef.current = { x: 0, y: 0 };
+          setCropEditor((prev) => (prev ? { ...prev, zoom: newZoom, cropArea: { x: 0, y: 0 } } : prev));
+        } else {
+          setCropEditor((prev) => (prev ? { ...prev, zoom: newZoom } : prev));
+        }
+        adminZoomRAFRef.current = null;
+      });
+    }
+  }, []);
 
   const loadOrders = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -157,11 +213,32 @@ const AdminDashboard = () => {
     return () => window.removeEventListener('orders-update', handler);
   }, [loadOrdersWithCurrentFilter]);
 
+  useLayoutEffect(() => {
+    if (!openMenuId || !menuTriggerRef.current) {
+      setMenuPosition(null);
+      return;
+    }
+    const rect = menuTriggerRef.current.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+    });
+  }, [openMenuId]);
+
   useEffect(() => {
     if (openMenuId == null) return;
     const close = () => setOpenMenuId(null);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
+    const handler = (e) => {
+      if (menuTriggerRef.current?.contains(e.target) || menuDropdownRef.current?.contains(e.target)) return;
+      close();
+    };
+    const onScroll = () => close();
+    document.addEventListener('click', handler);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('click', handler);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, [openMenuId]);
 
   useEffect(() => {
@@ -301,7 +378,8 @@ const AdminDashboard = () => {
     setZipError(null);
     setDownloadingZipId(order.id);
     try {
-      const { blob, filename } = await api.getOrderZip(order.id);
+      const fallbackFilename = `${toZipDate(order.created_at)}-${toZipClientSlug(order.client_name)}.zip`;
+      const { blob, filename } = await api.getOrderZip(order.id, fallbackFilename);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = filename;
@@ -449,87 +527,21 @@ const AdminDashboard = () => {
                           <button
                             type="button"
                             className="admin-btn-menu-trigger"
-                            onClick={() => setOpenMenuId((id) => (id === p.id ? null : p.id))}
+                            ref={openMenuId === p.id ? menuTriggerRef : null}
+                            onClick={(ev) => {
+                              if (openMenuId === p.id) {
+                                setOpenMenuId(null);
+                              } else {
+                                menuTriggerRef.current = ev.currentTarget;
+                                setOpenMenuId(p.id);
+                              }
+                            }}
                             aria-expanded={openMenuId === p.id}
                             aria-haspopup="true"
                             aria-label="Abrir menú de acciones"
                           >
                             <span className="admin-btn-menu-dots" aria-hidden>⋯</span>
                           </button>
-                          {openMenuId === p.id && (
-                            <div className="admin-orders-dropdown" role="menu">
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="admin-orders-dropdown-item admin-orders-dropdown-ver"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  openDetail(p.id);
-                                }}
-                              >
-                                Ver
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="admin-orders-dropdown-item admin-orders-dropdown-zip"
-                                disabled={downloadingZipId === p.id}
-                                onClick={() => downloadOrderZip(p)}
-                              >
-                                {downloadingZipId === p.id ? '...' : 'Descargar zip'}
-                              </button>
-                              {(p.status === 'draft' || p.status === 'delivered') && p.active !== false && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-ocultar"
-                                  disabled={hidingOrderId === p.id}
-                                  onClick={(ev) => {
-                                    setOpenMenuId(null);
-                                    hideDraft(ev, p.id);
-                                  }}
-                                >
-                                  {hidingOrderId === p.id ? '...' : 'Ocultar'}
-                                </button>
-                              )}
-                              {showHiddenOrders && p.active === false && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-mostrar"
-                                  disabled={hidingOrderId === p.id}
-                                  onClick={(ev) => {
-                                    setOpenMenuId(null);
-                                    showOrder(ev, p.id);
-                                  }}
-                                >
-                                  {hidingOrderId === p.id ? '...' : 'Mostrar'}
-                                </button>
-                              )}
-                              {(p.status === 'in_progress' || p.status === 'sent') && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-status"
-                                  disabled={updatingStatusId === p.id}
-                                  onClick={() => changeOrderStatus(p.id, 'processing')}
-                                >
-                                  {updatingStatusId === p.id ? '...' : 'Pasar a Finalizado'}
-                                </button>
-                              )}
-                              {p.status === 'processing' && (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="admin-orders-dropdown-item admin-orders-dropdown-status"
-                                  disabled={updatingStatusId === p.id}
-                                  onClick={() => changeOrderStatus(p.id, 'delivered')}
-                                >
-                                  {updatingStatusId === p.id ? '...' : 'Pasar a Entregado'}
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -540,6 +552,99 @@ const AdminDashboard = () => {
           )}
         </section>
       </div>
+
+      {openMenuId != null && menuPosition != null && (() => {
+        const p = pedidos.find((o) => o.id === openMenuId);
+        if (!p) return null;
+        return createPortal(
+          <div
+            ref={menuDropdownRef}
+            className="admin-orders-dropdown admin-orders-dropdown-portal"
+            role="menu"
+            style={{
+              position: 'fixed',
+              top: menuPosition.top,
+              right: menuPosition.right,
+              width: 'max-content',
+              minWidth: '8.5rem',
+              zIndex: 1050,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-orders-dropdown-item admin-orders-dropdown-ver"
+              onClick={() => {
+                setOpenMenuId(null);
+                openDetail(p.id);
+              }}
+            >
+              Ver
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-orders-dropdown-item admin-orders-dropdown-zip"
+              disabled={downloadingZipId === p.id}
+              onClick={() => downloadOrderZip(p)}
+            >
+              {downloadingZipId === p.id ? '...' : 'Descargar zip'}
+            </button>
+            {(p.status === 'draft' || p.status === 'delivered') && p.active !== false && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-ocultar"
+                disabled={hidingOrderId === p.id}
+                onClick={(ev) => {
+                  setOpenMenuId(null);
+                  hideDraft(ev, p.id);
+                }}
+              >
+                {hidingOrderId === p.id ? '...' : 'Ocultar'}
+              </button>
+            )}
+            {showHiddenOrders && p.active === false && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-mostrar"
+                disabled={hidingOrderId === p.id}
+                onClick={(ev) => {
+                  setOpenMenuId(null);
+                  showOrder(ev, p.id);
+                }}
+              >
+                {hidingOrderId === p.id ? '...' : 'Mostrar'}
+              </button>
+            )}
+            {(p.status === 'in_progress' || p.status === 'sent') && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-status"
+                disabled={updatingStatusId === p.id}
+                onClick={() => changeOrderStatus(p.id, 'processing')}
+              >
+                {updatingStatusId === p.id ? '...' : 'Pasar a Finalizado'}
+              </button>
+            )}
+            {p.status === 'processing' && (
+              <button
+                type="button"
+                role="menuitem"
+                className="admin-orders-dropdown-item admin-orders-dropdown-status"
+                disabled={updatingStatusId === p.id}
+                onClick={() => changeOrderStatus(p.id, 'delivered')}
+              >
+                {updatingStatusId === p.id ? '...' : 'Pasar a Entregado'}
+              </button>
+            )}
+          </div>,
+          document.body
+        );
+      })()}
 
       {detailLoading && (
         <div className="admin-detail-overlay" onClick={() => setDetailLoading(false)}>
@@ -735,6 +840,7 @@ const AdminDashboard = () => {
             type="button"
             className="admin-context-menu-item"
             onClick={() => {
+              adminPrevZoomRef.current = 1;
               setCropEditor({
                 crop: contextMenu.crop,
                 step: 'select',
@@ -782,6 +888,7 @@ const AdminDashboard = () => {
                       step: 'crop',
                       file,
                       objectUrl,
+                      cropMediaLoading: true,
                     }));
                   }}
                 />
@@ -793,19 +900,34 @@ const AdminDashboard = () => {
             {cropEditor.step === 'crop' && cropEditor.objectUrl && (
               <div className="admin-crop-editor-crop">
                 <div className="admin-crop-editor-crop-wrap">
+                  {cropEditor.cropMediaLoading && (
+                    <div className="image-editor-crop-loading admin-crop-loading" aria-live="polite" aria-busy="true">
+                      <span className="image-editor-crop-loading-spinner" aria-hidden="true" />
+                      <span className="image-editor-crop-loading-text">Cargando imagen…</span>
+                    </div>
+                  )}
                   <Cropper
                     image={cropEditor.objectUrl}
                     crop={cropEditor.cropArea}
                     zoom={cropEditor.zoom}
                     aspect={1}
-                    onCropChange={(area) => setCropEditor((prev) => ({ ...prev, cropArea: area }))}
-                    onZoomChange={(z) => setCropEditor((prev) => ({ ...prev, zoom: z }))}
+                    minZoom={1}
+                    objectFit="cover"
+                    restrictPosition
+                    style={{ containerStyle: { backgroundColor: '#0f172a' } }}
+                    cropSize={{ width: 420, height: 420 }}
+                    onCropChange={adminOnCropChangeThrottled}
+                    onZoomChange={adminOnZoomChangeThrottled}
                     onCropComplete={(_, croppedAreaPixels) => {
                       adminCropPixelsRef.current = croppedAreaPixels;
+                      setCropEditor((prev) => (prev ? { ...prev, cropArea: adminCropAreaRef.current, zoom: adminZoomRef.current } : prev));
                     }}
+                    onMediaLoaded={() => setCropEditor((prev) => ({ ...prev, cropMediaLoading: false }))}
                     cropShape="rect"
-                    showGrid
+                    showGrid={false}
+                    classes={{ cropAreaClassName: 'image-editor-crop-area' }}
                   />
+                  <div className="image-editor-crop-line-guide" aria-hidden="true" />
                 </div>
                 <div className="admin-crop-editor-actions">
                   <button

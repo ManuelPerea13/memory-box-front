@@ -31,26 +31,42 @@ const sanitizePhoneInput = (value) => {
   return result;
 };
 
-// API uses English keys/values; labels shown in Spanish
-const VARIANTS = {
-  no_light: [
-    { id: 'graphite', name: 'Grafito', images: ['Grafito1.jpg', 'Grafito2.jpg', 'Grafito3.jpg', 'Grafito4.jpg'] },
-    { id: 'wood', name: 'Madera', images: ['Madera1.jpg', 'Madera2.jpg', 'Madera3.jpg', 'Madera4.jpg'] },
-    { id: 'black', name: 'Negro', images: ['Negro1.jpg', 'Negro2.jpg', 'Negro3.jpg'] },
-    { id: 'marble', name: 'Mármol', images: ['Marmol1.jpg', 'Marmol2.jpg', 'Marmol3.jpg', 'Marmol4.jpg'] },
-  ],
-  with_light: [
-    { id: 'graphite_light', name: 'Grafito', images: ['Grafito1.jpg', 'Grafito2.jpg', 'Grafito3.jpg', 'Grafito4.jpg'] },
-    { id: 'wood_light', name: 'Madera', images: ['Madera-luz-1.jpg', 'Madera-luz-2.jpg', 'Madera-luz-3.jpg', 'Madera-luz-4.jpg'] },
-    { id: 'black_light', name: 'Negro', images: ['Negro-luz-1.jpg', 'Negro-luz-2.jpg', 'Negro-luz-3.jpg', 'Negro-luz-4.jpg'] },
-    { id: 'marble_light', name: 'Mármol', images: ['Marmol-luz-1.jpg', 'Marmol-luz-2.jpg', 'Marmol-luz-3.jpg', 'Marmol-luz-4.jpg'] },
-  ],
+/** Mapeo id/código de variante del API al código que espera el backend (graphite, wood, black, marble, *_light). */
+const API_ID_TO_BACKEND = {
+  graphite: 'graphite', grafito: 'graphite',
+  wood: 'wood', madera: 'wood',
+  black: 'black', negro: 'black', negras: 'black',
+  marble: 'marble', mármol: 'marble',
+  graphite_light: 'graphite_light', grafito_light: 'graphite_light',
+  wood_light: 'wood_light', madera_light: 'wood_light',
+  black_light: 'black_light', negro_light: 'black_light', negras_light: 'black_light',
+  marble_light: 'marble_light', mármol_light: 'marble_light',
+};
+/** Normaliza id/name de variante del API al código que espera el backend. */
+const toBackendVariantCode = (apiId, boxType) => {
+  if (!apiId && apiId !== 0) return '';
+  const key = String(apiId).trim().toLowerCase();
+  const code = API_ID_TO_BACKEND[key];
+  if (code) return code;
+  if (boxType === 'with_light' && key.endsWith('_light')) return key;
+  return key;
+};
+
+/** URLs que empiezan con /media/ se sirven desde el backend. */
+const getMediaSrc = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('/media/')) {
+    const base = (api.baseUrl || '').replace(/\/$/, '');
+    return base ? `${base}${url.startsWith('/') ? url : `/${url}`}` : url;
+  }
+  return url;
 };
 
 const ClientData = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const editingOrderId = location.state?.orderId;
+  const [variantsData, setVariantsData] = useState({ no_light: [], with_light: [] });
   const [loadingOrder, setLoadingOrder] = useState(!!editingOrderId);
   const [form, setForm] = useState({
     nombre_cliente: '',
@@ -65,16 +81,28 @@ const ClientData = () => {
   const [modalVariant, setModalVariant] = useState(null);
 
   useEffect(() => {
+    api.getVariantsPublic().then((data) => {
+      if (data && typeof data === 'object') {
+        setVariantsData({
+          no_light: Array.isArray(data.no_light) ? data.no_light : [],
+          with_light: Array.isArray(data.with_light) ? data.with_light : [],
+        });
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!editingOrderId) return;
     let cancelled = false;
     api.getOrder(editingOrderId).then((o) => {
       if (cancelled) return;
+      const boxType = o.box_type || 'no_light';
       setForm({
         nombre_cliente: formatNombreCompleto((o.client_name || '').trim()),
         telefono: sanitizePhoneInput(o.phone || ''),
-        box_type: o.box_type || 'no_light',
+        box_type: boxType,
         led_type: o.led_type || 'warm_led',
-        variant: o.variant || '',
+        variant: toBackendVariantCode(o.variant, boxType) || o.variant || '',
         shipping_option: o.shipping_option || 'pickup_uber',
       });
     }).catch(() => {}).finally(() => {
@@ -116,11 +144,12 @@ const ClientData = () => {
     setLoading(true);
     setError(null);
     try {
+      const variantCode = toBackendVariantCode(form.variant, form.box_type) || form.variant;
       const payload = {
         client_name: formatNombreCompleto(form.nombre_cliente.trim()),
         phone: form.telefono,
         box_type: form.box_type,
-        variant: form.variant,
+        variant: variantCode,
         shipping_option: form.shipping_option,
       };
       if (form.box_type === 'with_light') payload.led_type = form.led_type;
@@ -138,7 +167,7 @@ const ClientData = () => {
     }
   };
 
-  const variants = VARIANTS[form.box_type] || [];
+  const variants = variantsData[form.box_type] || [];
   const conLuz = form.box_type === 'with_light';
 
   return (
@@ -238,11 +267,13 @@ const ClientData = () => {
               Variante de caja:
             </label>
             <div className="client-data-variants-grid">
-              {variants.map((v) => (
-                <label key={v.id} className={`client-data-variant-option ${form.variant === v.id ? 'selected' : ''}`}>
-                  <input type="radio" name="variant" value={v.id} checked={form.variant === v.id} onChange={handleChange} />
+              {variants.map((v) => {
+                const backendCode = toBackendVariantCode(v.id, form.box_type);
+                return (
+                <label key={v.id} className={`client-data-variant-option ${form.variant === backendCode ? 'selected' : ''}`}>
+                  <input type="radio" name="variant" value={backendCode} checked={form.variant === backendCode} onChange={handleChange} />
                   <div className="variant-image-wrap">
-                    <img src={`/static/variants/${v.images[0]}`} alt={v.name} />
+                    <img src={getMediaSrc(v.images && v.images[0])} alt={v.name} />
                     <button
                       type="button"
                       className="variant-plus-fotos"
@@ -253,7 +284,7 @@ const ClientData = () => {
                   </div>
                   <span className="variant-name">{v.name}</span>
                 </label>
-              ))}
+              ); })}
             </div>
             {conLuz && (
               <p className="client-data-pilas">🔋 Pilas ya incluidas</p>
@@ -306,7 +337,7 @@ const ClientData = () => {
             </div>
             <div className="client-data-modal-images">
               {modalVariant.images.map((img, i) => (
-                <img key={i} src={`/static/variants/${img}`} alt={`${modalVariant.name} ${i + 1}`} />
+                <img key={i} src={getMediaSrc(img)} alt={`${modalVariant.name} ${i + 1}`} />
               ))}
             </div>
           </div>

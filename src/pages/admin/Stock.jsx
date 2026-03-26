@@ -18,6 +18,11 @@ const BOX_TYPE_LABELS = {
 const BASE_VARIANTS = ['graphite', 'wood', 'black', 'marble'];
 const BOX_TYPES = ['no_light', 'with_light'];
 
+const STOCK_TABS = [
+  { id: 0, label: 'Stock de cajitas' },
+  { id: 1, label: 'Stock de packaging' },
+];
+
 const toBaseVariant = (v) => (v ? v.replace(/_light$/, '') : null);
 const isEnCurso = (s) => s === 'in_progress' || s === 'sent';
 
@@ -26,11 +31,13 @@ const stockKey = (variant, boxType) => `${variant}_${boxType || 'no_light'}`;
 const AdminStock = () => {
   const [stock, setStock] = useState([]);
   const [pedidos, setPedidos] = useState([]);
+  const [packaging, setPackaging] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ variant: 'graphite', boxType: 'no_light', quantity: '' });
   const [popoverKey, setPopoverKey] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
   const popoverTriggerRef = useRef(null);
   const navigate = useNavigate();
 
@@ -64,6 +71,10 @@ const AdminStock = () => {
     api.getOrders().then(setPedidos).catch(() => setPedidos([]));
   }, []);
 
+  const loadPackaging = useCallback(() => {
+    api.getPackaging().then(setPackaging).catch(() => setPackaging([]));
+  }, []);
+
   useEffect(() => {
     loadStock();
   }, [loadStock]);
@@ -71,6 +82,10 @@ const AdminStock = () => {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  useEffect(() => {
+    loadPackaging();
+  }, [loadPackaging]);
 
   const refreshStockAndOrders = useCallback(() => {
     loadStock(true);
@@ -170,10 +185,39 @@ const AdminStock = () => {
   return (
     <div className="admin-stock-page">
       <header className="admin-page-header">
-        <h1>Stock de cajitas</h1>
-        <p>Editá el stock físico disponible por variante.</p>
+        <h1>Stock</h1>
+        <p>Stock de cajitas por variante y stock de packaging (cajas de cartón y bolsas).</p>
       </header>
 
+      <div className="admin-variantes-tabs" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0' }}>
+          {STOCK_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '0.6rem 1.2rem',
+                border: '1px solid #e2e8f0',
+                borderBottom: 'none',
+                marginBottom: '-1px',
+                background: activeTab === tab.id ? '#f1f5f9' : 'transparent',
+                color: activeTab === tab.id ? '#334155' : '#64748b',
+                fontWeight: activeTab === tab.id ? 600 : 400,
+                cursor: 'pointer',
+                borderRadius: '6px 6px 0 0',
+                fontFamily: 'inherit',
+                fontSize: '0.9rem',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 0 && (
+      <>
       <div className="admin-stock-sections">
         <section className="admin-stock-section" aria-label="Stock Sin luz">
           <h2 className="admin-stock-section-title admin-stock-section-title--no-light">Sin luz</h2>
@@ -365,6 +409,28 @@ const AdminStock = () => {
           {error && <p className="client-data-error">{error}</p>}
         </form>
       </div>
+      </>
+      )}
+
+      {activeTab === 1 && (
+        <div className="client-data-card admin-costos-card">
+          <h2 className="admin-precios-section-title">Stock de packaging</h2>
+          <p className="admin-costos-hint">
+            Se descuentan automáticamente 1 caja y 1 bolsa por cada pedido que pasa a estado <strong>Finalizada</strong>.
+            Las compras de cajas de cartón o bolsas ecommerce se registran en Costos y suman a este stock.
+          </p>
+          <div className="admin-costos-packaging-grid">
+            {packaging.map((p) => (
+              <div key={p.id} className="admin-costos-packaging-item">
+                <span className="admin-costos-packaging-label">
+                  {p.item_type_display || (p.item_type === 'caja_carton' ? 'Caja de cartón (envío)' : 'Bolsa ecommerce')}
+                </span>
+                <span className="admin-costos-packaging-qty">{p.quantity}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

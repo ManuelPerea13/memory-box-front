@@ -123,6 +123,34 @@ const AdminLayout = () => {
           >
             Precios
           </NavLink>
+          <NavLink
+            to="/admin/costos"
+            className={({ isActive }) => `admin-sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            Costos
+          </NavLink>
+          <NavLink
+            to="/admin/fondo"
+            className={({ isActive }) => `admin-sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            Video y Música
+          </NavLink>
+          <NavLink
+            to="/admin/variantes"
+            className={({ isActive }) => `admin-sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            Variantes
+          </NavLink>
+          <NavLink
+            to="/admin/estadisticas"
+            className={({ isActive }) => `admin-sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            Estadísticas
+          </NavLink>
         </nav>
         <div className="admin-sidebar-footer">
           <span className="admin-sidebar-email">{userEmail}</span>
