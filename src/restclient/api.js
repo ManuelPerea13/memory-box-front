@@ -110,7 +110,7 @@ const api = {
    * Download order images as ZIP (backend builds it; avoids fetch to /media/).
    * Returns { blob, filename }. Requires auth.
    */
-  getOrderZip(orderId) {
+  getOrderZip(orderId, defaultFilename = null) {
     const url = `${BASE_URL}api/orders/${orderId}/download_zip/`;
     return fetch(url, {
       method: 'GET',
@@ -122,9 +122,24 @@ const api = {
         throw new Error(err.error || `Error ${res.status}`);
       }
       const blob = await res.blob();
-      const disp = res.headers.get('Content-Disposition');
-      const match = disp && /filename="?([^"]+)"?/.exec(disp);
-      const filename = match ? match[1].trim() : `order-${orderId}.zip`;
+      const disp = res.headers.get('Content-Disposition') || res.headers.get('content-disposition');
+      let filename = null;
+      if (disp) {
+        // Prefer RFC 5987 filename*=UTF-8''...
+        const matchStar = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(disp);
+        if (matchStar?.[1]) {
+          try {
+            filename = decodeURIComponent(matchStar[1].trim());
+          } catch {
+            filename = matchStar[1].trim();
+          }
+        }
+        if (!filename) {
+          const match = /filename\s*=\s*"([^"]+)"|filename\s*=\s*([^;]+)/i.exec(disp);
+          filename = (match?.[1] || match?.[2] || '').trim() || null;
+        }
+      }
+      if (!filename) filename = defaultFilename || `order-${orderId}.zip`;
       return { blob, filename };
     });
   },
