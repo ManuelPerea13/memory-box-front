@@ -143,9 +143,15 @@ const ImageEditor = () => {
   const prevZoomRef = useRef(1);
   const cropRAFRef = useRef(null);
   const zoomRAFRef = useRef(null);
+  /** Evita que el Cropper que se desmonta pise cropPixelsRef; callbacks ignorados durante el cambio */
+  const isSwitchingImageRef = useRef(false);
+  /** Último rectángulo en píxeles guardado por id (sincrónicamente al salir de una imagen) */
+  const lastSavedCropByIdRef = useRef({});
   const [cropWrapSize, setCropWrapSize] = useState({ width: CROP_BOX_SIZE, height: CROP_BOX_SIZE });
   const [cropMediaLoading, setCropMediaLoading] = useState(false);
   const selectedImageId = selectedIndex >= 0 && selectedIndex < images.length ? images[selectedIndex]?.id : null;
+  const selectedImageIdRef = useRef(null);
+  selectedImageIdRef.current = selectedImageId;
 
   // Mostrar carga cuando cambia la imagen a recortar
   useEffect(() => {
@@ -224,6 +230,8 @@ const ImageEditor = () => {
                 url: URL.createObjectURL(file),
                 name: item.name,
                 crop: item.crop || null,
+                cropPosition: item.cropPosition,
+                zoom: typeof item.zoom === 'number' ? item.zoom : undefined,
                 id: item.id || generateId(),
               });
             }
@@ -246,20 +254,16 @@ const ImageEditor = () => {
     return () => { cancelled = true; };
   }, [orderId]);
 
-  /** Zoom por debajo del cual forzamos centro (para que no se desplace al hacer zoom out). */
-  const ZOOM_CENTER_THRESHOLD = 2;
+  const isCropPixelsValid = (p) =>
+    p &&
+    typeof p.width === 'number' &&
+    typeof p.height === 'number' &&
+    p.width > 0 &&
+    p.height > 0 &&
+    Number.isFinite(p.x) &&
+    Number.isFinite(p.y);
+
   const onCropChangeThrottled = useCallback((newCrop) => {
-    const shouldForceCenter = zoomRef.current <= ZOOM_CENTER_THRESHOLD;
-    if (shouldForceCenter) {
-      cropPositionRef.current = { x: 0, y: 0 };
-      if (cropRAFRef.current == null) {
-        cropRAFRef.current = requestAnimationFrame(() => {
-          setCrop({ x: 0, y: 0 });
-          cropRAFRef.current = null;
-        });
-      }
-      return;
-    }
     cropPositionRef.current = newCrop;
     if (cropRAFRef.current == null) {
       cropRAFRef.current = requestAnimationFrame(() => {
@@ -286,26 +290,42 @@ const ImageEditor = () => {
     }
   }, []);
 
-  const onCropComplete = useCallback((_croppedArea, croppedAreaPixels) => {
-    cropPixelsRef.current = croppedAreaPixels;
+  const onCropComplete = useCallback((imageId, _croppedArea, croppedAreaPixels) => {
+    if (imageId !== selectedImageIdRef.current) return;
+    if (isSwitchingImageRef.current) return;
+    if (isCropPixelsValid(croppedAreaPixels)) {
+      cropPixelsRef.current = croppedAreaPixels;
+    }
     setCrop(cropPositionRef.current);
     setZoom(zoomRef.current);
   }, []);
 
-  const onCropAreaChange = useCallback((_croppedArea, croppedAreaPixels) => {
-    cropPixelsRef.current = croppedAreaPixels;
+  const onCropAreaChange = useCallback((imageId, _croppedArea, croppedAreaPixels) => {
+    if (imageId !== selectedImageIdRef.current) return;
+    if (isSwitchingImageRef.current) return;
+    if (isCropPixelsValid(croppedAreaPixels)) {
+      cropPixelsRef.current = croppedAreaPixels;
+    }
   }, []);
 
   const onMediaLoaded = useCallback((mediaSize) => {
     const img = images[selectedIndex];
-    if (!img?.crop || img.crop.w <= 0 || img.crop.h <= 0) {
+    const cropSize = { width: cropWrapSize.width, height: cropWrapSize.height };
+    const mem = img?.id ? lastSavedCropByIdRef.current[img.id] : null;
+    const savedRect =
+      mem?.crop?.w > 0 && mem?.crop?.h > 0
+        ? mem.crop
+        : img?.crop && img.crop.w > 0 && img.crop.h > 0
+          ? img.crop
+          : null;
+
+    if (!savedRect) {
       const { naturalWidth: w, naturalHeight: h } = mediaSize;
       const size = Math.min(w, h);
       const x = (w - size) / 2;
       const y = (h - size) / 2;
       const croppedAreaPixels = { x, y, width: size, height: size };
       cropPixelsRef.current = croppedAreaPixels;
-      const cropSize = { width: cropWrapSize.width, height: cropWrapSize.height };
       const { crop: initialCrop, zoom: initialZoom } = getInitialCropFromCroppedAreaPixels(
         croppedAreaPixels,
         mediaSize,
@@ -325,6 +345,41 @@ const ImageEditor = () => {
           next[selectedIndex] = {
             ...next[selectedIndex],
             crop: { x, y, w: size, h: size },
+            cropPosition: initialCrop,
+            zoom: initialZoom,
+          };
+        }
+        return next;
+      });
+    } else {
+      const croppedAreaPixels = {
+        x: savedRect.x,
+        y: savedRect.y,
+        width: savedRect.w,
+        height: savedRect.h,
+      };
+      cropPixelsRef.current = croppedAreaPixels;
+      const { crop: initialCrop, zoom: initialZoom } = getInitialCropFromCroppedAreaPixels(
+        croppedAreaPixels,
+        mediaSize,
+        0,
+        cropSize,
+        1,
+        3
+      );
+      cropPositionRef.current = initialCrop;
+      zoomRef.current = initialZoom;
+      prevZoomRef.current = initialZoom;
+      setCrop(initialCrop);
+      setZoom(initialZoom);
+      setImages((prev) => {
+        const next = [...prev];
+        if (next[selectedIndex]) {
+          next[selectedIndex] = {
+            ...next[selectedIndex],
+            crop: { x: savedRect.x, y: savedRect.y, w: savedRect.w, h: savedRect.h },
+            cropPosition: initialCrop,
+            zoom: initialZoom,
           };
         }
         return next;
@@ -335,19 +390,33 @@ const ImageEditor = () => {
 
   const saveCurrentCrop = useCallback(() => {
     const pixels = cropPixelsRef.current;
-    if (pixels && selectedIndex >= 0 && selectedIndex < images.length) {
-      setImages((prev) => {
-        const next = [...prev];
-        if (next[selectedIndex]) {
-          next[selectedIndex] = {
-            ...next[selectedIndex],
-            crop: { x: pixels.x, y: pixels.y, w: pixels.width, h: pixels.height },
-          };
-        }
-        return next;
-      });
+    if (
+      !pixels ||
+      !isCropPixelsValid(pixels) ||
+      selectedIndex < 0 ||
+      selectedIndex >= images.length
+    ) {
+      return;
     }
-  }, [selectedIndex, images.length]);
+    const position = cropPositionRef.current;
+    const zoomVal = zoomRef.current;
+    const cropData = {
+      crop: { x: pixels.x, y: pixels.y, w: pixels.width, h: pixels.height },
+      cropPosition: position ? { x: position.x, y: position.y } : undefined,
+      zoom: typeof zoomVal === 'number' ? zoomVal : undefined,
+    };
+    const currentId = images[selectedIndex]?.id;
+    if (currentId) {
+      lastSavedCropByIdRef.current[currentId] = { ...cropData };
+    }
+    setImages((prev) => {
+      const next = [...prev];
+      if (next[selectedIndex]) {
+        next[selectedIndex] = { ...next[selectedIndex], ...cropData };
+      }
+      return next;
+    });
+  }, [selectedIndex, images]);
 
   /* Acepta por tipo MIME o por extensión (iOS a veces no envía type en fotos de galería). Igual criterio en desktop, Android e iOS. */
   const isImageFile = (f) => {
@@ -411,6 +480,7 @@ const ImageEditor = () => {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     cropPixelsRef.current = null;
+    lastSavedCropByIdRef.current = {};
   };
 
   const openPhraseModal = () => {
@@ -484,7 +554,10 @@ const ImageEditor = () => {
     const removedId = images[idx]?.id;
     const next = images.filter((_, i) => i !== idx);
     URL.revokeObjectURL(images[idx].url);
-    if (removedId) setThumbPreviews((p) => { const n = { ...p }; delete n[removedId]; return n; });
+    if (removedId) {
+      delete lastSavedCropByIdRef.current[removedId];
+      setThumbPreviews((p) => { const n = { ...p }; delete n[removedId]; return n; });
+    }
     setImages(next);
     if (selectedIndex === idx) {
       setSelectedIndex(next.length ? Math.min(idx, next.length - 1) : -1);
@@ -510,24 +583,48 @@ const ImageEditor = () => {
   };
 
   const selectIndex = (idx) => {
+    isSwitchingImageRef.current = true;
     saveCurrentCrop();
     if (cropRAFRef.current != null) cancelAnimationFrame(cropRAFRef.current);
     if (zoomRAFRef.current != null) cancelAnimationFrame(zoomRAFRef.current);
     cropRAFRef.current = zoomRAFRef.current = null;
     const img = images[idx];
-    cropPositionRef.current = { x: 0, y: 0 };
-    zoomRef.current = 1;
-    prevZoomRef.current = 1;
-    if (img?.crop && img.crop.w > 0 && img.crop.h > 0) {
-      setCrop({ x: 0, y: 0 });
-      setZoom(1);
-      cropPixelsRef.current = { x: img.crop.x, y: img.crop.y, width: img.crop.w, height: img.crop.h };
+    const mem = img?.id ? lastSavedCropByIdRef.current[img.id] : null;
+    const rect =
+      mem?.crop?.w > 0 && mem?.crop?.h > 0
+        ? mem.crop
+        : img?.crop && img.crop.w > 0 && img.crop.h > 0
+          ? img.crop
+          : null;
+    if (rect) {
+      cropPixelsRef.current = { x: rect.x, y: rect.y, width: rect.w, height: rect.h };
+      const pos = mem?.cropPosition ?? img?.cropPosition;
+      const z = mem?.zoom ?? img?.zoom;
+      if (pos && typeof z === 'number') {
+        cropPositionRef.current = { x: pos.x, y: pos.y };
+        zoomRef.current = z;
+        prevZoomRef.current = z;
+        setCrop({ x: pos.x, y: pos.y });
+        setZoom(z);
+      } else {
+        cropPositionRef.current = { x: 0, y: 0 };
+        zoomRef.current = 1;
+        prevZoomRef.current = 1;
+        setCrop({ x: 0, y: 0 });
+        setZoom(1);
+      }
     } else {
+      cropPositionRef.current = { x: 0, y: 0 };
+      zoomRef.current = 1;
+      prevZoomRef.current = 1;
       setCrop({ x: 0, y: 0 });
       setZoom(1);
       cropPixelsRef.current = null;
     }
     setSelectedIndex(idx);
+    setTimeout(() => {
+      isSwitchingImageRef.current = false;
+    }, 150);
   };
 
   const handleGoToCliente = async () => {
@@ -540,6 +637,8 @@ const ImageEditor = () => {
             name: img.name,
             dataUrl: await fileToDataUrl(img.file),
             crop: img.crop,
+            cropPosition: img.cropPosition,
+            zoom: img.zoom,
           }))
         );
         sessionStorage.setItem(getEditorStateKey(orderId), JSON.stringify(items));
@@ -551,7 +650,7 @@ const ImageEditor = () => {
   };
 
   const getCropForIndex = (idx) => {
-    if (idx === selectedIndex && cropPixelsRef.current) {
+    if (idx === selectedIndex && isCropPixelsValid(cropPixelsRef.current)) {
       const d = cropPixelsRef.current;
       return { x: d.x, y: d.y, w: d.width, h: d.height };
     }
@@ -564,6 +663,12 @@ const ImageEditor = () => {
   });
 
   const handleSubmit = async () => {
+    const currentIdx = selectedIndex;
+    const refPixels = cropPixelsRef.current;
+    const capturedPixels =
+      refPixels && isCropPixelsValid(refPixels)
+        ? { x: refPixels.x, y: refPixels.y, w: refPixels.width, h: refPixels.height }
+        : null;
     saveCurrentCrop();
     if (!allHaveCrops || images.length !== REQUIRED_COUNT) return;
     setSubmitting(true);
@@ -572,7 +677,10 @@ const ImageEditor = () => {
       const formData = new FormData();
       images.forEach((img, i) => {
         formData.append(`image_${i}`, img.file);
-        const c = getCropForIndex(i) || img.crop || {};
+        const c =
+          i === currentIdx && capturedPixels
+            ? capturedPixels
+            : getCropForIndex(i) || img.crop || {};
         formData.append(`crop_data_${i}`, JSON.stringify({
           x: c.x ?? 0,
           y: c.y ?? 0,
@@ -744,14 +852,15 @@ const ImageEditor = () => {
               crop={crop}
               zoom={zoom}
               aspect={1}
-              minZoom={0.25}
-              objectFit="contain"
-              style={{ containerStyle: { backgroundColor: '#fff' } }}
+              minZoom={1}
+              objectFit="cover"
+              restrictPosition
+              style={{ containerStyle: { backgroundColor: '#0f172a' } }}
               cropSize={{ width: cropWrapSize.width, height: cropWrapSize.height }}
               onCropChange={onCropChangeThrottled}
               onZoomChange={onZoomChangeThrottled}
-              onCropComplete={onCropComplete}
-              onCropAreaChange={onCropAreaChange}
+              onCropComplete={(a, b) => onCropComplete(currentImg.id, a, b)}
+              onCropAreaChange={(a, b) => onCropAreaChange(currentImg.id, a, b)}
               onMediaLoaded={onMediaLoaded}
               initialCroppedAreaPixels={savedCrop && savedCrop.w > 0 && savedCrop.h > 0
                 ? { x: savedCrop.x, y: savedCrop.y, width: savedCrop.w, height: savedCrop.h }

@@ -39,6 +39,24 @@ const sanitizeFileName = (name) => {
     .trim() || 'cliente';
 };
 
+const toZipClientSlug = (name) => {
+  const raw = sanitizeFileName(name);
+  // Remove accents/diacritics and any non-alphanumeric, then collapse.
+  return raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .trim() || 'cliente';
+};
+
+const toZipDate = (createdAt) => {
+  const d = createdAt ? new Date(createdAt) : new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
+};
+
 const STATUS_LABELS = {
   draft: 'Borrador',
   sent: 'En Proceso',
@@ -147,18 +165,7 @@ const AdminDashboard = () => {
   const adminCropAreaRAFRef = useRef(null);
   const adminZoomRAFRef = useRef(null);
 
-  const ADMIN_ZOOM_CENTER_THRESHOLD = 2;
   const adminOnCropChangeThrottled = useCallback((area) => {
-    if (adminZoomRef.current <= ADMIN_ZOOM_CENTER_THRESHOLD) {
-      adminCropAreaRef.current = { x: 0, y: 0 };
-      if (adminCropAreaRAFRef.current == null) {
-        adminCropAreaRAFRef.current = requestAnimationFrame(() => {
-          setCropEditor((prev) => (prev ? { ...prev, cropArea: { x: 0, y: 0 } } : prev));
-          adminCropAreaRAFRef.current = null;
-        });
-      }
-      return;
-    }
     adminCropAreaRef.current = area;
     if (adminCropAreaRAFRef.current == null) {
       adminCropAreaRAFRef.current = requestAnimationFrame(() => {
@@ -371,7 +378,8 @@ const AdminDashboard = () => {
     setZipError(null);
     setDownloadingZipId(order.id);
     try {
-      const { blob, filename } = await api.getOrderZip(order.id);
+      const fallbackFilename = `${toZipDate(order.created_at)}-${toZipClientSlug(order.client_name)}.zip`;
+      const { blob, filename } = await api.getOrderZip(order.id, fallbackFilename);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = filename;
@@ -903,9 +911,10 @@ const AdminDashboard = () => {
                     crop={cropEditor.cropArea}
                     zoom={cropEditor.zoom}
                     aspect={1}
-                    minZoom={0.25}
-                    objectFit="contain"
-                    style={{ containerStyle: { backgroundColor: '#fff' } }}
+                    minZoom={1}
+                    objectFit="cover"
+                    restrictPosition
+                    style={{ containerStyle: { backgroundColor: '#0f172a' } }}
                     cropSize={{ width: 420, height: 420 }}
                     onCropChange={adminOnCropChangeThrottled}
                     onZoomChange={adminOnZoomChangeThrottled}
