@@ -179,18 +179,46 @@ const api = {
     });
   },
 
-  /** Encola el procesamiento async de las 10 imágenes. Devuelve { task_id, status, total }. */
-  submitOrderImages(orderId: string | number, formData: FormData) {
-    return fetch(`${BASE_URL}api/orders/${orderId}/submit_images/`, {
-      method: "POST",
-      body: formData,
-      credentials: "include",
-    }).then(async (res) => {
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || `Request failed: ${res.status}`);
+  /**
+   * Encola el procesamiento async de las 10 imágenes. Devuelve { task_id, status, total }.
+   * Usa XHR (no fetch) para poder reportar el progreso REAL de subida vía onUploadProgress(0-100).
+   */
+  submitOrderImages(
+    orderId: string | number,
+    formData: FormData,
+    onUploadProgress?: (pct: number) => void,
+  ): Promise<SubmitTask> {
+    return new Promise<SubmitTask>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${BASE_URL}api/orders/${orderId}/submit_images/`);
+      xhr.withCredentials = true;
+      if (onUploadProgress && xhr.upload) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            onUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
       }
-      return res.json() as Promise<SubmitTask>;
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText) as SubmitTask);
+          } catch {
+            resolve({} as SubmitTask);
+          }
+        } else {
+          let msg = `Request failed: ${xhr.status}`;
+          try {
+            const e = JSON.parse(xhr.responseText) as { error?: string };
+            if (e.error) msg = e.error;
+          } catch {
+            /* respuesta no-JSON */
+          }
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Error de red al subir las imágenes"));
+      xhr.send(formData);
     });
   },
 

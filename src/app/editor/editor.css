@@ -752,6 +752,29 @@
   font-weight: 700;
   font-size: 0.95rem;
   box-shadow: 0 2px 10px rgba(25, 118, 210, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Barra de progreso de subida que rellena el botón al enviar */
+.image-editor-submit-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: rgba(255, 255, 255, 0.28);
+  transition: width 0.25s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.image-editor-submit-label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .image-editor-submit-btn:disabled {

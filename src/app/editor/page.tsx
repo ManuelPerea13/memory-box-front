@@ -261,6 +261,7 @@ function EditorInner() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState<{ done: number; total: number } | null>(null);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
@@ -920,7 +921,13 @@ function EditorInner() {
         );
       }
       // Encola el procesamiento async y hace polling hasta que el worker termina.
-      const { task_id, total } = await api.submitOrderImages(orderId as string, formData);
+      setUploadPct(0);
+      const { task_id, total } = await api.submitOrderImages(
+        orderId as string,
+        formData,
+        (pct) => setUploadPct(pct),
+      );
+      setUploadPct(null);
       setSubmitProgress({ done: 0, total: total || REQUIRED_COUNT });
       let finished = false;
       for (let attempt = 0; attempt < 180; attempt++) {
@@ -944,6 +951,7 @@ function EditorInner() {
     } finally {
       setSubmitting(false);
       setSubmitProgress(null);
+      setUploadPct(null);
     }
   };
 
@@ -1336,24 +1344,45 @@ function EditorInner() {
             onClick={handleActionBar}
             disabled={submitting}
           >
-            {submitting ? (
-              <Send className="size-4" aria-hidden />
-            ) : remaining > 0 ? (
-              <ImagePlus className="size-4" aria-hidden />
-            ) : !allHaveCrops ? (
-              <Scissors className="size-4" aria-hidden />
-            ) : (
-              <Send className="size-4" aria-hidden />
+            {submitting && (
+              <span
+                className="image-editor-submit-progress"
+                style={{
+                  width: `${
+                    uploadPct != null
+                      ? uploadPct
+                      : submitProgress
+                        ? Math.round(
+                            (submitProgress.done / submitProgress.total) * 100,
+                          )
+                        : 0
+                  }%`,
+                }}
+                aria-hidden
+              />
             )}
-            {submitting
-              ? submitProgress
-                ? `Procesando ${submitProgress.done}/${submitProgress.total}...`
-                : "Enviando..."
-              : remaining > 0
-                ? "Tocá para cargar fotos"
-                : !allHaveCrops
-                  ? "Recortá tus fotos para enviar"
-                  : "Enviar"}
+            <span className="image-editor-submit-label">
+              {submitting ? (
+                <Send className="size-4" aria-hidden />
+              ) : remaining > 0 ? (
+                <ImagePlus className="size-4" aria-hidden />
+              ) : !allHaveCrops ? (
+                <Scissors className="size-4" aria-hidden />
+              ) : (
+                <Send className="size-4" aria-hidden />
+              )}
+              {submitting
+                ? uploadPct != null
+                  ? `Subiendo ${uploadPct}%`
+                  : submitProgress
+                    ? `Procesando ${submitProgress.done}/${submitProgress.total}...`
+                    : "Preparando..."
+                : remaining > 0
+                  ? "Tocá para cargar fotos"
+                  : !allHaveCrops
+                    ? "Recortá tus fotos para enviar"
+                    : "Enviar"}
+            </span>
           </button>
         </div>
       </div>
