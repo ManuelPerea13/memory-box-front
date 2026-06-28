@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-box-front
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memory-box-front
+  template:
+    metadata:
+      labels:
+        app: memory-box-front
+    spec:
+      containers:
+        - name: memory-box-front
+          image: localhost:32000/memory-box-front:prod
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
