@@ -8,11 +8,11 @@ spec:
   ingressClassName: public
   tls:
     - hosts:
-        - pos-service.cloud
-        - www.pos-service.cloud
+        - innovbi.site
+        - www.innovbi.site
       secretName: memory-box-front-tls
   rules:
-    - host: pos-service.cloud
+    - host: innovbi.site
       http:
         paths:
           - path: /
@@ -22,7 +22,7 @@ spec:
                 name: memory-box-front
                 port:
                   number: 80
-    - host: www.pos-service.cloud
+    - host: www.innovbi.site
       http:
         paths:
           - path: /
