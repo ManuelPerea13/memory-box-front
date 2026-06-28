@@ -37,6 +37,62 @@ import {
 import "./editor.css";
 
 const REQUIRED_COUNT = 10;
+// Lado máximo (px) al que se redimensiona cada imagen antes de subirla. El recorte
+// final es 685px, así que no hace falta mandar la foto original full-res: reduce
+// muchísimo el tamaño de subida (clave en conexiones móviles) sin perder calidad.
+const MAX_UPLOAD_DIM = 2048;
+
+/**
+ * Redimensiona una imagen para subir y devuelve el blob + el factor de escala
+ * aplicado (para escalar el crop_data, que está en px de la imagen original).
+ * Si la imagen ya es chica, devuelve el File original con scale=1.
+ */
+const downscaleForUpload = (
+  file: File,
+  maxDim: number,
+): Promise<{ blob: Blob; scale: number }> =>
+  new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => {
+      const w = image.naturalWidth;
+      const h = image.naturalHeight;
+      const longest = Math.max(w, h);
+      const scale = longest > maxDim ? maxDim / longest : 1;
+      if (scale === 1) {
+        URL.revokeObjectURL(url);
+        resolve({ blob: file, scale: 1 });
+        return;
+      }
+      const cw = Math.round(w * scale);
+      const ch = Math.round(h * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        resolve({ blob: file, scale: 1 });
+        return;
+      }
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(image, 0, 0, cw, ch);
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(url);
+          resolve(blob ? { blob, scale } : { blob: file, scale: 1 });
+        },
+        "image/jpeg",
+        0.9,
+      );
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ blob: file, scale: 1 });
+    };
+    image.src = url;
+  });
 const DEFAULT_ALIAS = "manu.perea13";
 const DEFAULT_TELEFONO = "+54 9 351 392 3790";
 const DEFAULT_EMAIL = "copiiworld@gmail.com";
@@ -842,22 +898,27 @@ function EditorInner() {
     setError(null);
     try {
       const formData = new FormData();
-      images.forEach((img, i) => {
-        formData.append(`image_${i}`, img.file);
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i];
         const c =
           i === currentIdx && capturedPixels
             ? capturedPixels
             : getCropForIndex(i) || img.crop || ({} as Partial<CropRect>);
+        // Redimensiona la imagen y escala el crop en el mismo factor.
+        const { blob, scale } = await downscaleForUpload(img.file, MAX_UPLOAD_DIM);
+        const baseName =
+          (img.file.name || `img_${i}`).replace(/\.[^.]+$/, "") || `img_${i}`;
+        formData.append(`image_${i}`, blob, `${baseName}.jpg`);
         formData.append(
           `crop_data_${i}`,
           JSON.stringify({
-            x: c.x ?? 0,
-            y: c.y ?? 0,
-            width: c.w ?? 1000,
-            height: c.h ?? 1000,
+            x: Math.round((c.x ?? 0) * scale),
+            y: Math.round((c.y ?? 0) * scale),
+            width: Math.round((c.w ?? 1000) * scale),
+            height: Math.round((c.h ?? 1000) * scale),
           }),
         );
-      });
+      }
       // Encola el procesamiento async y hace polling hasta que el worker termina.
       const { task_id, total } = await api.submitOrderImages(orderId as string, formData);
       setSubmitProgress({ done: 0, total: total || REQUIRED_COUNT });
