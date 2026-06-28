@@ -1,0 +1,119 @@
+# Stack local completo de Memory Box: backend (Django + Postgres) + frontend Next.
+#
+# Autocontenido (no usa `include`): define sus propios servicios con nombres y
+# puertos PROPIOS para no chocar con otros stacks que puedan estar corriendo.
+#   - Backend  API : http://localhost:8001
+#   - Frontend Next: http://localhost:3002
+#
+# Uso:
+#   docker compose -f docker-compose.full.yml up --build      # levantar
+#   docker compose -f docker-compose.full.yml down            # detener
+#
+# (El docker-compose.yml del backend sigue sirviendo para correrlo solo en :8000.)
+name: memory-box-local
+
+services:
+  mb-db:
+    image: postgres:14-alpine
+    container_name: memory-box-local-db
+    env_file:
+      - ../memory-box-back/.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-memory_box}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - mb_local_db:/var/lib/postgresql/data
+    networks:
+      - mbnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-memory_box}"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+
+  mb-web:
+    build:
+      context: ../memory-box-back
+    image: memory-box-back:latest
+    container_name: memory-box-local-web
+    env_file:
+      - ../memory-box-back/.env
+    environment:
+      # Overrides para el stack local (tienen prioridad sobre el .env):
+      - DB_HOST=mb-db
+      - FRONTEND_URL=http://localhost:3002
+      - REDIS_URL=redis://mb-redis:6379/0
+    volumes:
+      - ../memory-box-back/src:/app/src
+      - mb_local_static:/app/src/staticfiles
+      - mb_local_media:/app/src/media
+    ports:
+      - "8001:8000"
+    networks:
+      - mbnet
+    depends_on:
+      mb-db:
+        condition: service_healthy
+      mb-redis:
+        condition: service_started
+
+  mb-redis:
+    image: redis:7-alpine
+    container_name: memory-box-local-redis
+    networks:
+      - mbnet
+
+  mb-celery:
+    build:
+      context: ../memory-box-back
+    image: memory-box-back:latest
+    container_name: memory-box-local-celery
+    command: celery -A memory_box worker -l info
+    env_file:
+      - ../memory-box-back/.env
+    environment:
+      - DB_HOST=mb-db
+      - REDIS_URL=redis://mb-redis:6379/0
+    volumes:
+      - ../memory-box-back/src:/app/src
+      - mb_local_media:/app/src/media
+    networks:
+      - mbnet
+    depends_on:
+      mb-db:
+        condition: service_healthy
+      mb-redis:
+        condition: service_started
+
+  front:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: memory-box-next:dev
+    container_name: memory-box-local-front
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      # El navegador llama directo al puerto publicado del back.
+      - NEXT_PUBLIC_API_URL=http://localhost:8001/
+    ports:
+      - "3002:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - mbnet
+    depends_on:
+      - mb-web
+
+volumes:
+  mb_local_db:
+  mb_local_static:
+  mb_local_media:
+
+networks:
+  mbnet:
+    driver: bridge

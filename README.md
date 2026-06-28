@@ -1,60 +1,82 @@
-# memory-box-front (Cajita de la Memoria – React)
+# Memory Box — Frontend (Next.js)
 
-Frontend React para el sistema de pedidos Cajita de la Memoria. Orden de carpetas replicado de catriel-front.
+Frontend de **Memory Box** (cajas de fotos personalizadas) reescrito en **Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn**. Consume la API de [`memory-box-back`](../memory-box-back) (Django REST + WebSockets).
+
+Es la migración del front original (`memory-box-front`, Create React App + JS) con **paridad funcional completa**, tomando como base la plantilla de `asociadosmm-front`.
+
+## Stack
+
+- **Next.js 16** (App Router, `output: standalone`)
+- **React 19** + **TypeScript** estricto
+- **Tailwind CSS v4** + **shadcn** (tokens y helpers en `src/app/globals.css`)
+- **fetch** nativo (cliente en `src/lib/api.ts`)
+- **JWT** en `localStorage` (`src/contexts/AuthContext.tsx`)
+- **WebSockets** para pedidos y stock en tiempo real (`src/hooks`)
+- Gráficos con **chart.js** / **react-chartjs-2**, recorte con **react-easy-crop**
 
 ## Estructura
 
 ```
-memory-box-front/
-├── public/
-│   └── index.html
-├── src/
-│   ├── App.js
-│   ├── index.js
-│   ├── components/
-│   │   └── auth/
-│   │       └── ProtectedRoute.js
-│   ├── contexts/
-│   │   └── AuthContext.js
-│   ├── pages/
-│   │   ├── Home.jsx
-│   │   ├── ClientData.jsx
-│   │   ├── ImageEditor.jsx
-│   │   └── admin/
-│   │       ├── Login.jsx
-│   │       └── Dashboard.jsx
-│   ├── restclient/
-│   │   └── api.js
-│   └── routing/
-│       └── MainRouting.js
-└── package.json
+src/
+├── app/                      # Rutas (App Router)
+│   ├── page.tsx              # Home (landing pública)
+│   ├── cliente/page.tsx      # Datos del cliente → crea pedido
+│   ├── editor/page.tsx       # Editor de recorte de imágenes
+│   ├── pedido/[id]/page.tsx  # Vista pública de pedido
+│   ├── login/page.tsx        # Login admin
+│   └── admin/                # Panel admin (protegido)
+│       ├── layout.tsx        # Guard + sidebar + notificaciones
+│       ├── page.tsx          # Dashboard de pedidos
+│       ├── stock/  precios/  costos/  fondo/  variantes/  estadisticas/
+├── components/               # AdminLayout, ui (button, AppSelect), auth guard
+├── contexts/AuthContext.tsx  # Auth JWT
+├── hooks/                    # useOrdersWebSocket, useStockWebSocket
+├── lib/api.ts                # Cliente HTTP (contrato con el backend)
+└── types/                    # Tipos de dominio
 ```
 
-## Uso
+## Variables de entorno
 
-### Con Docker Compose
+`.env.local` (ver `.env.example`):
 
 ```bash
-cp .env.example .env
-# Opcional: editar REACT_APP_API_URL (por defecto http://localhost:8000/)
-docker compose up -d
+# URL base del backend (con barra final). Vacío o "/" usa el host actual en :8000.
+NEXT_PUBLIC_API_URL=http://localhost:8000/
 ```
 
-- App: `http://localhost:3000`
+> `NEXT_PUBLIC_*` se hornea en build. En el `Dockerfile` se pasa como `--build-arg`.
 
-### Local
+## Desarrollo local (sin Docker)
 
 ```bash
 npm install
-npm start
+npm run dev          # http://localhost:3000  (requiere el backend en :8000)
 ```
 
-Configuración: crear `.env` con `REACT_APP_API_URL=http://localhost:8000/` si el backend está en otra URL.
+Scripts: `dev`, `build`, `start`, `lint`, `typecheck`, `check` (lint + typecheck + build).
 
-## Rutas
+## Docker
 
-- `/` – Inicio
-- `/cliente` – Formulario datos del cliente (crea pedido y redirige al editor)
-- `/editor/:pedidoId` – Editor de imágenes (placeholder; integrar Cropper/react-image-crop)
-- `/login` – Login admin
-- `/admin` – Panel admin (protegido, lista de pedidos)
+### Solo el front
+
+```bash
+docker compose up dev      # dev con hot-reload → http://localhost:3001
+docker compose up app      # build de producción → http://localhost:3000
+```
+
+### Stack completo (backend + Postgres + front)
+
+Levanta backend + Postgres + front de una. Es **autocontenido** y usa puertos
+propios (8001 / 3002) para no chocar con otros stacks en `8000` / `3000`:
+
+```bash
+docker compose -f docker-compose.full.yml up --build
+docker compose -f docker-compose.full.yml down       # detener
+```
+
+- Backend API : http://localhost:8001
+- Frontend    : http://localhost:3002
+
+El compose setea `FRONTEND_URL=http://localhost:3002` en el backend para que los
+QR generados apunten al front local, y `NEXT_PUBLIC_API_URL=http://localhost:8001/`
+en el front. Reutiliza el `.env` del backend para credenciales de Postgres.
