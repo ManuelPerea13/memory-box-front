@@ -42,57 +42,105 @@ const REQUIRED_COUNT = 10;
 // muchísimo el tamaño de subida (clave en conexiones móviles) sin perder calidad.
 const MAX_UPLOAD_DIM = 2048;
 
+interface DownscaleResult {
+  blob: Blob;
+  scaleX: number;
+  scaleY: number;
+}
+
 /**
- * Redimensiona una imagen para subir y devuelve el blob + el factor de escala
- * aplicado (para escalar el crop_data, que está en px de la imagen original).
- * Si la imagen ya es chica, devuelve el File original con scale=1.
+ * Decodifica el archivo respetando la orientación EXIF y devuelve el bitmap ya
+ * orientado. Es clave que coincida con lo que muestra el <img> del cropper: si
+ * las dimensiones quedan invertidas (caso EXIF), el crop_data no coincide con la
+ * imagen subida y el recorte sale desplazado.
  */
-const downscaleForUpload = (
+const decodeOriented = async (
+  file: File,
+): Promise<{ src: CanvasImageSource; w: number; h: number; close: () => void }> => {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file, {
+        imageOrientation: "from-image",
+      });
+      return {
+        src: bitmap,
+        w: bitmap.width,
+        h: bitmap.height,
+        close: () => bitmap.close(),
+      };
+    } catch {
+      /* fallback a <img> */
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new window.Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("decode error"));
+    el.src = url;
+  });
+  return {
+    src: image,
+    w: image.naturalWidth,
+    h: image.naturalHeight,
+    close: () => URL.revokeObjectURL(url),
+  };
+};
+
+/**
+ * Redimensiona una imagen para subir y devuelve el blob + los factores de escala
+ * por eje (para escalar el crop_data, que está en px del espacio que vio el
+ * cropper). `mediaW/mediaH` son las dimensiones que reportó el cropper: se usan
+ * como referencia para que el crop siga alineado aunque la decodificación
+ * difiera. Si la imagen ya es chica, devuelve el File original con escala 1.
+ */
+const downscaleForUpload = async (
   file: File,
   maxDim: number,
-): Promise<{ blob: Blob; scale: number }> =>
-  new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const image = new window.Image();
-    image.onload = () => {
-      const w = image.naturalWidth;
-      const h = image.naturalHeight;
-      const longest = Math.max(w, h);
-      const scale = longest > maxDim ? maxDim / longest : 1;
-      if (scale === 1) {
-        URL.revokeObjectURL(url);
-        resolve({ blob: file, scale: 1 });
-        return;
-      }
-      const cw = Math.round(w * scale);
-      const ch = Math.round(h * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = cw;
-      canvas.height = ch;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        URL.revokeObjectURL(url);
-        resolve({ blob: file, scale: 1 });
-        return;
-      }
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(image, 0, 0, cw, ch);
-      canvas.toBlob(
-        (blob) => {
-          URL.revokeObjectURL(url);
-          resolve(blob ? { blob, scale } : { blob: file, scale: 1 });
-        },
-        "image/jpeg",
-        0.9,
+  mediaW?: number,
+  mediaH?: number,
+): Promise<DownscaleResult> => {
+  let decoded: Awaited<ReturnType<typeof decodeOriented>> | null = null;
+  try {
+    decoded = await decodeOriented(file);
+    const { src, w, h } = decoded;
+    // Espacio de referencia del crop: lo que vio el cropper (si se conoce).
+    const refW = mediaW && mediaW > 0 ? mediaW : w;
+    const refH = mediaH && mediaH > 0 ? mediaH : h;
+    if (refW !== w || refH !== h) {
+      console.warn(
+        `[editor] dims del cropper (${refW}x${refH}) != dims decodificadas (${w}x${h}) — posible EXIF`,
       );
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve({ blob: file, scale: 1 });
-    };
-    image.src = url;
-  });
+    }
+    const longest = Math.max(w, h);
+    if (longest <= maxDim) {
+      return { blob: file, scaleX: w / refW, scaleY: h / refH };
+    }
+    const scale = maxDim / longest;
+    const cw = Math.round(w * scale);
+    const ch = Math.round(h * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { blob: file, scaleX: w / refW, scaleY: h / refH };
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(src, 0, 0, cw, ch);
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob((b) => res(b), "image/jpeg", 0.9),
+    );
+    // Escala respecto al espacio del crop, no al de la imagen decodificada.
+    return blob
+      ? { blob, scaleX: cw / refW, scaleY: ch / refH }
+      : { blob: file, scaleX: w / refW, scaleY: h / refH };
+  } catch {
+    return { blob: file, scaleX: 1, scaleY: 1 };
+  } finally {
+    decoded?.close();
+  }
+};
+
 const DEFAULT_ALIAS = "manu.perea13";
 const DEFAULT_TELEFONO = "+54 9 351 392 3790";
 const DEFAULT_EMAIL = "copiiworld@gmail.com";
@@ -289,6 +337,9 @@ function EditorInner() {
   const isSwitchingImageRef = useRef(false);
   /** Último rectángulo en píxeles guardado por id (sincrónicamente al salir de una imagen) */
   const lastSavedCropByIdRef = useRef<Record<string, SavedCropData>>({});
+  /** Dimensiones que reportó el cropper por imagen: espacio en el que están las
+   *  coordenadas de crop_data. Se usa al subir para escalar el crop sin desfasaje. */
+  const mediaSizeByIdRef = useRef<Record<string, { w: number; h: number }>>({});
 
   const [cropWrapSize, setCropWrapSize] = useState<Size>({
     width: CROP_BOX_SIZE,
@@ -502,6 +553,12 @@ function EditorInner() {
   const onMediaLoaded = useCallback(
     (mediaSize: MediaSize) => {
       const img = images[selectedIndex];
+      if (img?.id) {
+        mediaSizeByIdRef.current[img.id] = {
+          w: mediaSize.naturalWidth,
+          h: mediaSize.naturalHeight,
+        };
+      }
       const cropSize: Size = {
         width: cropWrapSize.width,
         height: cropWrapSize.height,
@@ -906,17 +963,23 @@ function EditorInner() {
             ? capturedPixels
             : getCropForIndex(i) || img.crop || ({} as Partial<CropRect>);
         // Redimensiona la imagen y escala el crop en el mismo factor.
-        const { blob, scale } = await downscaleForUpload(img.file, MAX_UPLOAD_DIM);
+        const media = mediaSizeByIdRef.current[img.id];
+        const { blob, scaleX, scaleY } = await downscaleForUpload(
+          img.file,
+          MAX_UPLOAD_DIM,
+          media?.w,
+          media?.h,
+        );
         const baseName =
           (img.file.name || `img_${i}`).replace(/\.[^.]+$/, "") || `img_${i}`;
         formData.append(`image_${i}`, blob, `${baseName}.jpg`);
         formData.append(
           `crop_data_${i}`,
           JSON.stringify({
-            x: Math.round((c.x ?? 0) * scale),
-            y: Math.round((c.y ?? 0) * scale),
-            width: Math.round((c.w ?? 1000) * scale),
-            height: Math.round((c.h ?? 1000) * scale),
+            x: Math.round((c.x ?? 0) * scaleX),
+            y: Math.round((c.y ?? 0) * scaleY),
+            width: Math.round((c.w ?? 1000) * scaleX),
+            height: Math.round((c.h ?? 1000) * scaleY),
           }),
         );
       }
@@ -1168,9 +1231,13 @@ function EditorInner() {
                   <p className="image-editor-drop-secondary">
                     Tocá para seleccionar (o arrastrá en PC)
                   </p>
+                  {/* stopPropagation: el label ya abre el picker de forma nativa.
+                      Sin esto el click burbujea al div drop-zone, que dispara un
+                      segundo .click() sobre el mismo input (doble apertura). */}
                   <label
                     htmlFor="image-editor-file"
                     className="image-editor-drop-btn"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     Seleccionar archivos
                   </label>
