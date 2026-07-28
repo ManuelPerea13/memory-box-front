@@ -982,6 +982,21 @@ function EditorInner() {
             height: Math.round((c.h ?? 1000) * scaleY),
           }),
         );
+        // Diagnóstico: espacio en el que el cropper reportó el recorte y el rect
+        // crudo elegido. Permite detectar desfasajes contra la imagen recibida.
+        formData.append(
+          `crop_debug_${i}`,
+          JSON.stringify({
+            media_w: media?.w ?? null,
+            media_h: media?.h ?? null,
+            raw_x: Math.round(c.x ?? 0),
+            raw_y: Math.round(c.y ?? 0),
+            raw_w: Math.round(c.w ?? 0),
+            raw_h: Math.round(c.h ?? 0),
+            scale_x: Number(scaleX.toFixed(4)),
+            scale_y: Number(scaleY.toFixed(4)),
+          }),
+        );
       }
       // Encola el procesamiento async y hace polling hasta que el worker termina.
       setUploadPct(0);
