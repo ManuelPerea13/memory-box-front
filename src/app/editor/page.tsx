@@ -34,6 +34,7 @@ import {
   clearEditorImages,
   type StoredEditorImage,
 } from "@/lib/editorStore";
+import "react-easy-crop/react-easy-crop.css";
 import "./editor.css";
 
 const REQUIRED_COUNT = 10;
@@ -526,17 +527,49 @@ function EditorInner() {
     }
   }, []);
 
+  /**
+   * Persiste el recorte de una imagen apenas termina el gesto. Antes esto sólo
+   * ocurría al cambiar de imagen (saveCurrentCrop), así que la miniatura —y lo
+   * que se envía al back— quedaban con el crop anterior al último ajuste.
+   */
+  const persistCropFor = useCallback((imageId: string, pixels: Area) => {
+    const cropData: SavedCropData = {
+      crop: { x: pixels.x, y: pixels.y, w: pixels.width, h: pixels.height },
+      cropPosition: { ...cropPositionRef.current },
+      zoom: zoomRef.current,
+    };
+    lastSavedCropByIdRef.current[imageId] = { ...cropData };
+    setImages((prev) => {
+      const idx = prev.findIndex((im) => im.id === imageId);
+      if (idx < 0) return prev;
+      const cur = prev[idx].crop;
+      if (
+        cur &&
+        cur.x === cropData.crop.x &&
+        cur.y === cropData.crop.y &&
+        cur.w === cropData.crop.w &&
+        cur.h === cropData.crop.h
+      ) {
+        return prev; // sin cambios: evita re-render y regenerar la miniatura
+      }
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...cropData };
+      return next;
+    });
+  }, []);
+
   const onCropComplete = useCallback(
     (imageId: string, _croppedArea: Area, croppedAreaPixels: Area) => {
       if (imageId !== selectedImageIdRef.current) return;
       if (isSwitchingImageRef.current) return;
       if (isCropPixelsValid(croppedAreaPixels)) {
         cropPixelsRef.current = croppedAreaPixels;
+        persistCropFor(imageId, croppedAreaPixels);
       }
       setCrop(cropPositionRef.current);
       setZoom(zoomRef.current);
     },
-    [],
+    [persistCropFor],
   );
 
   const onCropAreaChange = useCallback(
@@ -980,21 +1013,6 @@ function EditorInner() {
             y: Math.round((c.y ?? 0) * scaleY),
             width: Math.round((c.w ?? 1000) * scaleX),
             height: Math.round((c.h ?? 1000) * scaleY),
-          }),
-        );
-        // Diagnóstico: espacio en el que el cropper reportó el recorte y el rect
-        // crudo elegido. Permite detectar desfasajes contra la imagen recibida.
-        formData.append(
-          `crop_debug_${i}`,
-          JSON.stringify({
-            media_w: media?.w ?? null,
-            media_h: media?.h ?? null,
-            raw_x: Math.round(c.x ?? 0),
-            raw_y: Math.round(c.y ?? 0),
-            raw_w: Math.round(c.w ?? 0),
-            raw_h: Math.round(c.h ?? 0),
-            scale_x: Number(scaleX.toFixed(4)),
-            scale_y: Number(scaleY.toFixed(4)),
           }),
         );
       }

@@ -18,25 +18,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
 
-  // Hidratar desde localStorage tras montar (evita mismatch SSR/CSR).
+  // Hidratar desde localStorage TRAS montar: leerlo en el initializer del
+  // useState rompería la hidratación (el server no tiene localStorage), así que
+  // el setState en el effect es intencional y sólo corre una vez.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setToken(localStorage.getItem("authToken"));
-    setUserEmail(localStorage.getItem("userEmail") || "");
-  }, []);
-
-  useEffect(() => {
-    if (token) {
-      try {
-        jwtDecode(token);
-      } catch {
-        setToken(null);
-        setUserEmail("");
-        localStorage.removeItem("authToken");
-        localStorage.removeItem("userEmail");
-      }
+    const stored = localStorage.getItem("authToken");
+    const storedEmail = localStorage.getItem("userEmail") || "";
+    if (!stored) return;
+    // Token inválido/corrupto: limpiar en vez de hidratar.
+    try {
+      jwtDecode(stored);
+    } catch {
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("userEmail");
+      return;
     }
-  }, [token]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setToken(stored);
+    setUserEmail(storedEmail);
+  }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {

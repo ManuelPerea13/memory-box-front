@@ -1021,3 +1021,34 @@
     flex: none;
   }
 }
+
+/* FIX recorte corrido: el preflight de Tailwind (img { max-width:100%;
+   height:auto }) pisaba el dimensionado de react-easy-crop y el visor mostraba
+   la imagen deformada, con un área distinta a la del crop real que se envía.
+   Reglas de la librería replicadas con prioridad. */
+.image-editor-crop-wrap .reactEasyCrop_Cover_Horizontal {
+  width: 100% !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+.image-editor-crop-wrap .reactEasyCrop_Cover_Vertical {
+  width: auto !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+.image-editor-crop-wrap .reactEasyCrop_Contain {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  margin: auto !important;
+}
+
+/* La imagen del cropper es flex item del Container: sin esto flex-shrink
+   podría comprimirla por debajo de su tamaño intrínseco y deformarla. */
+.image-editor-crop-wrap .reactEasyCrop_Image,
+.image-editor-crop-wrap .reactEasyCrop_Video {
+  flex-shrink: 0 !important;
+}

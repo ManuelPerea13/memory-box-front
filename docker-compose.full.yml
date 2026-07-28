@@ -101,9 +101,16 @@ services:
     ports:
       - "3002:3000"
     volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
+      # Bind-mounts selectivos (no la raíz): montar todo el proyecto hace que Next
+      # intente reescribir /app/next-env.d.ts sobre el bind-mount de Docker Desktop
+      # en macOS y falle con "Unknown system error -35", tumbando el dev server.
+      # Con esto el hot-reload del código sigue funcionando.
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./next.config.ts:/app/next.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./postcss.config.mjs:/app/postcss.config.mjs
+      - ./components.json:/app/components.json
     networks:
       - mbnet
     depends_on:
