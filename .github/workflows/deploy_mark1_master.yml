@@ -1,0 +1,54 @@
+name: Deploy Mark1 (master)
+
+# Deploy automático a mark1 (MicroK8s) en cada push a master.
+# Corre en un self-hosted runner instalado en mark1: el registry localhost:32000
+# y microk8s solo son accesibles desde esa máquina.
+#
+# Deploy manual: Actions -> "Deploy Mark1 (master)" -> Run workflow.
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-mark1-memory-box-front-master
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - memory-box-front
+    env:
+      NS: memory-box-prod
+      APP: memory-box-front
+      # NEXT_PUBLIC_* se hornea en build-time: el navegador llama a esta URL.
+      API_URL: https://api.innovbi.site/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build, push y rollout en mark1
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="localhost:32000/${APP}:master-${GITHUB_SHA::7}"
+          echo "Imagen: ${IMAGE} (API: ${API_URL})"
+
+          microk8s enable registry >/dev/null 2>&1 || true
+
+          docker build --build-arg NEXT_PUBLIC_API_URL="${API_URL}" -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
+          microk8s kubectl apply -k k8s/microk8s/overlays/prod
+          microk8s kubectl -n "${NS}" set image deployment/${APP} ${APP}="${IMAGE}"
+          microk8s kubectl -n "${NS}" rollout status deployment/${APP} --timeout=300s
+
+      - name: Estado final
+        if: always()
+        shell: bash
+        run: microk8s kubectl get pods -n "${NS}" -l app="${APP}"
