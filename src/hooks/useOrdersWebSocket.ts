@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -19,6 +19,8 @@ export default function useOrdersWebSocket(onOrdersUpdate: OrdersUpdateHandler) 
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const cancelledRef = useRef(false);
+  // Estado real (no leer el ref en render: rompe react-hooks/refs).
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     onOrdersUpdateRef.current = onOrdersUpdate;
@@ -58,6 +60,7 @@ export default function useOrdersWebSocket(onOrdersUpdate: OrdersUpdateHandler) 
             return;
           }
           reconnectAttemptsRef.current = 0;
+          setIsConnected(true);
         };
 
         ws.onmessage = (event) => {
@@ -75,6 +78,7 @@ export default function useOrdersWebSocket(onOrdersUpdate: OrdersUpdateHandler) 
 
         ws.onclose = (event) => {
           wsRef.current = null;
+          setIsConnected(false);
           if (cancelledRef.current) return;
           if (event.code === 1000 || event.code === 1001) return;
           reconnectAttemptsRef.current += 1;
@@ -103,5 +107,5 @@ export default function useOrdersWebSocket(onOrdersUpdate: OrdersUpdateHandler) 
     };
   }, []);
 
-  return { isConnected: wsRef.current?.readyState === WebSocket.OPEN };
+  return { isConnected };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -18,6 +18,9 @@ export default function useStockWebSocket(onStockUpdate: StockUpdateHandler) {
   const onStockUpdateRef = useRef(onStockUpdate);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  // Estado real (no leer el ref en render: no dispara re-render y rompe la
+  // regla react-hooks/refs).
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     onStockUpdateRef.current = onStockUpdate;
@@ -50,6 +53,7 @@ export default function useStockWebSocket(onStockUpdate: StockUpdateHandler) {
 
         ws.onopen = () => {
           reconnectAttemptsRef.current = 0;
+          setIsConnected(true);
         };
 
         ws.onmessage = (event) => {
@@ -67,6 +71,7 @@ export default function useStockWebSocket(onStockUpdate: StockUpdateHandler) {
 
         ws.onclose = (event) => {
           wsRef.current = null;
+          setIsConnected(false);
           if (event.code === 1000 || event.code === 1001) return;
           if (document.hidden) return;
           reconnectAttemptsRef.current += 1;
@@ -105,5 +110,5 @@ export default function useStockWebSocket(onStockUpdate: StockUpdateHandler) {
     };
   }, []);
 
-  return { isConnected: wsRef.current?.readyState === WebSocket.OPEN };
+  return { isConnected };
 }
