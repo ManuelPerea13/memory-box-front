@@ -29,14 +29,13 @@ Migración completa a memory-box.shop (commit `ed1a5f9`):
 - Integrado al dev-panel (app :3104, dev :3154).
 - Dominio memory-box.shop end-to-end (DNS CF + tunnel + ingress +
   build mismo-origen), 2026-08-06.
+- Ruta /ws al back en el ingress (websockets orders/stock,
+  handshake 101 verificado) y cert de origen emitido, 2026-08-06.
 
 ## Pendiente
 
 - [ ] Completar este checkpoint con el estado real del proyecto
       (leer el código en la próxima tarea).
-- [ ] Confirmar emisión del cert de origen `memory-box-front-shop-tls`
-      (challenge estaba pendiente por caché DNS en mark1, ya
-      flusheada; TLS de borde lo cubre CF mientras tanto).
 - [ ] Revisar por qué el push a master no disparó GitHub Actions
       (runner mark1 estaba vivo y polleando; ¿incidente de GitHub?).
 
