@@ -4,17 +4,46 @@ metadata:
   name: memory-box-front
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    # submit_images sube las 10 fotos originales (decenas de MB) vía /api
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
 spec:
   ingressClassName: public
   tls:
     - hosts:
-        - innovbi.site
-        - www.innovbi.site
-      secretName: memory-box-front-tls
+        - memory-box.shop
+        - www.memory-box.shop
+      secretName: memory-box-front-shop-tls
   rules:
-    - host: innovbi.site
+    - host: memory-box.shop
       http:
         paths:
+          # Mismo origen: el front se buildea con NEXT_PUBLIC_API_URL="/"
+          # y el cliente antepone "api/" a cada ruta (src/lib/api.ts).
+          # /admin y /static son del front (Next); Django admin queda
+          # accesible solo por LAN vía NodePort 30082.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /media
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
           - path: /
             pathType: Prefix
             backend:
@@ -22,9 +51,30 @@ spec:
                 name: memory-box-front
                 port:
                   number: 80
-    - host: www.innovbi.site
+    - host: www.memory-box.shop
       http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /media
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: memory-box-back
+                port:
+                  number: 80
           - path: /
             pathType: Prefix
             backend:

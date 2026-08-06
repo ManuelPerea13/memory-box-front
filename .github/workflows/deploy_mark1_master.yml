@@ -27,7 +27,7 @@ jobs:
       NS: memory-box-prod
       APP: memory-box-front
       # NEXT_PUBLIC_* se hornea en build-time: el navegador llama a esta URL.
-      API_URL: https://api.innovbi.site/
+      API_URL: "/"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
